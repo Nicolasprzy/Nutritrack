@@ -2,9 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>remote-notification</string>
-	</array>
+	<key>NSHealthShareUsageDescription</key>
+	<string>NutriTrack lit vos données de santé pour enrichir votre suivi nutritionnel et corporel.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>NutriTrack enregistre votre poids et vos calories brûlées dans l'app Santé.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Utilisé pour scanner les codes-barres des aliments et les identifier automatiquement.</string>
 </dict>
 </plist>

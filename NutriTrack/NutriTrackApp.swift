@@ -1,32 +1,40 @@
-//
-//  NutriTrackApp.swift
-//  NutriTrack
-//
-//  Created by Nicolas on 23/03/2026.
-//
-
 import SwiftUI
 import SwiftData
 
 @main
 struct NutriTrackApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Item.self,
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+    let container: ModelContainer
 
+    init() {
+        let schema = Schema([
+            FoodItem.self,
+            FoodEntry.self,
+            BodyMetric.self,
+            ActivityEntry.self,
+            MealPlan.self,
+            UserProfile.self
+        ])
+        let config = ModelConfiguration(
+            schema: schema,
+            cloudKitDatabase: .automatic
+        )
         do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            container = try ModelContainer(for: schema, configurations: config)
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            fatalError("ModelContainer error: \(error)")
         }
-    }()
+    }
 
     var body: some Scene {
         WindowGroup {
             ContentView()
         }
-        .modelContainer(sharedModelContainer)
+        .modelContainer(container)
+
+        #if os(macOS)
+        Settings {
+            ProfileView()
+        }
+        #endif
     }
 }
