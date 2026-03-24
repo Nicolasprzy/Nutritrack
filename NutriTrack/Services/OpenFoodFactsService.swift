@@ -57,49 +57,133 @@ class OpenFoodFactsService {
     private let session = URLSession.shared
     private let cacheTTL: TimeInterval = 7 * 24 * 3600  // 7 jours
 
-    // MARK: - Recherche par texte
+    // MARK: - Normalisation (accents, casse)
 
-    func rechercher(query: String, context: ModelContext) async -> [FoodItem] {
-        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
+    /// Normalise une chaîne pour la comparaison : minuscules + sans accents
+    func normaliser(_ s: String) -> String {
+        s.lowercased()
+         .folding(options: .diacriticInsensitive, locale: .current)
+    }
 
-        // 1. Chercher d'abord dans le cache SwiftData
-        let caches = rechercherDansCache(query: query, context: context)
-        if !caches.isEmpty {
-            return caches
+    // MARK: - Recherche locale avec scoring
+
+    /// Recherche instantanée dans le cache local avec scoring de pertinence.
+    /// Accessible depuis la vue pour un affichage immédiat (0 ms).
+    func rechercherDansCache(query: String, context: ModelContext) -> [FoodItem] {
+        let q = normaliser(query.trimmingCharacters(in: .whitespaces))
+        guard !q.isEmpty else { return [] }
+
+        // Tokens individuels (ex: "poulet cuit" → ["poulet", "cuit"])
+        let tokens = q.split(separator: " ").map(String.init).filter { $0.count >= 2 }
+
+        let descriptor = FetchDescriptor<FoodItem>()
+        guard let tous = try? context.fetch(descriptor) else { return [] }
+
+        // Score de pertinence pour chaque aliment
+        let notes = tous.compactMap { item -> (FoodItem, Int)? in
+            let score = pertinence(item: item, query: q, tokens: tokens)
+            return score > 0 ? (item, score) : nil
         }
 
-        // 2. Appel réseau
-        let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
-        let urlString = "\(APIConstants.openFoodFactsSearch)?search_terms=\(encoded)&json=1&page_size=20&lc=fr&fields=product_name,brands,code,nutriments,serving_size,image_front_url,image_url"
+        // Tri : score décroissant, puis Seed en priorité, puis alpha
+        return notes
+            .sorted { a, b in
+                if a.1 != b.1 { return a.1 > b.1 }
+                let pA = a.0.source == "Seed"
+                let pB = b.0.source == "Seed"
+                if pA != pB { return pA }
+                return a.0.name < b.0.name
+            }
+            .map(\.0)
+    }
 
-        guard let url = URL(string: urlString) else { return [] }
+    /// Score de pertinence : plus c'est haut, plus c'est en tête de liste
+    private func pertinence(item: FoodItem, query: String, tokens: [String]) -> Int {
+        let nom   = normaliser(item.name)
+        let brand = normaliser(item.brand)
+
+        // Correspondance exacte
+        if nom == query                          { return 100 }
+        // Commence exactement par la requête
+        if nom.hasPrefix(query)                  { return 80 }
+        // Contient la requête complète
+        if nom.contains(query)                   { return 60 }
+        // La marque contient la requête complète
+        if brand.contains(query)                 { return 45 }
+
+        // Matching par tokens : tous les mots trouvés
+        if !tokens.isEmpty {
+            let matchesNom   = tokens.filter { nom.contains($0) }.count
+            let matchesBrand = tokens.filter { brand.contains($0) }.count
+            let totalMatches = matchesNom + matchesBrand
+
+            if matchesNom == tokens.count        { return 40 }   // tous les tokens dans le nom
+            if totalMatches == tokens.count      { return 35 }   // tous les tokens (nom+marque)
+            if totalMatches > 0                  { return 10 + totalMatches * 5 } // partiel
+        }
+        return 0
+    }
+
+    // MARK: - Recherche réseau (avec résultats locaux en fallback)
+
+    func rechercher(query: String, context: ModelContext) async -> [FoodItem] {
+        let q = query.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { return [] }
+
+        // Résultats locaux déjà affichés par la vue — on les ré-inclut pour fusion finale
+        let caches = rechercherDansCache(query: q, context: context)
+
+        // URL sans restriction de pays (cc=fr) pour plus de résultats
+        // lc=fr conservé : étiquettes en français quand disponibles
+        let encoded = q.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? q
+        let urlString = "\(APIConstants.openFoodFactsSearch)?search_terms=\(encoded)&json=1&page_size=30&lc=fr&fields=product_name,brands,code,nutriments,serving_size,image_front_url,image_url&action=process&sort_by=unique_scans_n"
+
+        guard let url = URL(string: urlString) else { return caches }
 
         isLoading = true
         errorMessage = nil
-
         defer { isLoading = false }
 
         do {
+            // Vérification d'annulation avant l'appel réseau
+            try Task.checkCancellation()
+
             let (data, _) = try await session.data(from: url)
+
+            try Task.checkCancellation()
+
             let response = try JSONDecoder().decode(OFFSearchResponse.self, from: data)
-            let items = response.products.compactMap { convertirEnFoodItem($0) }
+            let apiItems = response.products.compactMap { convertirEnFoodItem($0) }
 
-            // Sauvegarder dans le cache
-            for item in items {
-                mettreEnCache(item: item, context: context)
+            for item in apiItems { mettreEnCache(item: item, context: context) }
+
+            // Fusion : cache d'abord (déjà scoré), puis items API non encore en cache
+            var vus = Set(caches.map { $0.barcode })
+            var resultats = caches
+            for item in apiItems {
+                if !item.barcode.isEmpty && !vus.contains(item.barcode) {
+                    resultats.append(item)
+                    vus.insert(item.barcode)
+                } else if item.barcode.isEmpty {
+                    // Item sans barcode : dédup par nom normalisé
+                    let nomNorm = normaliser(item.name)
+                    if !resultats.contains(where: { normaliser($0.name) == nomNorm }) {
+                        resultats.append(item)
+                    }
+                }
             }
-
-            return items
+            return resultats
+        } catch is CancellationError {
+            return caches  // tâche annulée proprement
         } catch {
-            errorMessage = "Erreur lors de la recherche : \(error.localizedDescription)"
-            return []
+            errorMessage = "Réseau indisponible — résultats locaux uniquement."
+            return caches
         }
     }
 
     // MARK: - Recherche par code-barres
 
     func rechercherParCodeBarre(_ barcode: String, context: ModelContext) async -> FoodItem? {
-        // Vérifier le cache d'abord
         if let cached = rechercherParCodeBarreDansCache(barcode: barcode, context: context) {
             return cached
         }
@@ -120,9 +204,7 @@ class OpenFoodFactsService {
             }
 
             let item = convertirEnFoodItem(product)
-            if let item = item {
-                mettreEnCache(item: item, context: context)
-            }
+            if let item { mettreEnCache(item: item, context: context) }
             return item
         } catch {
             errorMessage = "Erreur réseau : veuillez vérifier votre connexion."
@@ -131,23 +213,6 @@ class OpenFoodFactsService {
     }
 
     // MARK: - Cache SwiftData
-
-    private func rechercherDansCache(query: String, context: ModelContext) -> [FoodItem] {
-        let termeRecherche = query.lowercased()
-        let limite = Date().addingTimeInterval(-cacheTTL)
-
-        let descriptor = FetchDescriptor<FoodItem>(
-            predicate: #Predicate<FoodItem> {
-                $0.lastUpdated > limite
-            }
-        )
-
-        guard let tous = try? context.fetch(descriptor) else { return [] }
-        return tous.filter {
-            $0.name.lowercased().contains(termeRecherche) ||
-            $0.brand.lowercased().contains(termeRecherche)
-        }
-    }
 
     private func rechercherParCodeBarreDansCache(barcode: String, context: ModelContext) -> FoodItem? {
         let limite = Date().addingTimeInterval(-cacheTTL)
@@ -160,14 +225,12 @@ class OpenFoodFactsService {
     }
 
     private func mettreEnCache(item: FoodItem, context: ModelContext) {
-        // Vérifier si l'aliment existe déjà (par code-barres ou nom+marque)
         if !item.barcode.isEmpty {
             let barcode = item.barcode
             let descriptor = FetchDescriptor<FoodItem>(
                 predicate: #Predicate<FoodItem> { $0.barcode == barcode }
             )
             if let existant = try? context.fetch(descriptor).first {
-                // Mettre à jour
                 existant.calories       = item.calories
                 existant.proteins       = item.proteins
                 existant.carbohydrates  = item.carbohydrates
@@ -180,16 +243,16 @@ class OpenFoodFactsService {
                 return
             }
         }
-
         context.insert(item)
         try? context.save()
     }
 
-    // MARK: - Conversion
+    // MARK: - Conversion OFFProduct → FoodItem
 
     private func convertirEnFoodItem(_ product: OFFProduct) -> FoodItem? {
         guard let name = product.product_name, !name.isEmpty else { return nil }
         guard let nutriments = product.nutriments else { return nil }
+        guard (nutriments.energy_kcal_100g ?? 0) > 0 else { return nil } // ignorer produits sans calories
 
         return FoodItem(
             barcode:        product.code ?? "",
@@ -206,13 +269,22 @@ class OpenFoodFactsService {
         )
     }
 
-    // MARK: - Récents (derniers aliments utilisés)
+    // MARK: - Récents
 
     func derniersAlimentsUtilises(context: ModelContext, limite: Int = 20) -> [FoodItem] {
         var descriptor = FetchDescriptor<FoodItem>(
             sortBy: [SortDescriptor(\.lastUpdated, order: .reverse)]
         )
         descriptor.fetchLimit = limite
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    /// Retourne les aliments marqués favoris, triés par date de dernière consommation.
+    func alimentsFavoris(context: ModelContext) -> [FoodItem] {
+        let descriptor = FetchDescriptor<FoodItem>(
+            predicate: #Predicate<FoodItem> { $0.isFavorite == true },
+            sortBy: [SortDescriptor(\.dateLastConsumed, order: .reverse)]
+        )
         return (try? context.fetch(descriptor)) ?? []
     }
 }

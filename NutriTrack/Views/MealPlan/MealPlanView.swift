@@ -3,6 +3,7 @@ import SwiftData
 
 struct MealPlanView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.activeProfileID) private var activeProfileID
     @Query private var profiles: [UserProfile]
 
     @State private var viewModel = MealPlanViewModel()
@@ -12,7 +13,7 @@ struct MealPlanView: View {
     @State private var titrePlan: String = ""
     @State private var affichageMode: AffichageMode = .liste
 
-    var profil: UserProfile? { profiles.first }
+    var profil: UserProfile? { profiles.first(where: { $0.profileID.uuidString == activeProfileID }) }
 
     enum AffichageMode: String, CaseIterable {
         case liste   = "Liste"

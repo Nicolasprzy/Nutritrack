@@ -3,6 +3,7 @@ import SwiftData
 
 @Model
 class FoodEntry {
+    var profileID: String = ""          // UUID du UserProfile propriétaire
     var date: Date = Date()
     var mealType: String = "dejeuner"   // "petit_dejeuner", "dejeuner", "diner", "collation"
     var quantity: Double = 100.0        // en grammes

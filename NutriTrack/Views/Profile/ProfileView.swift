@@ -3,7 +3,11 @@ import SwiftData
 
 struct ProfileView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.activeProfileID) private var activeProfileID
     @Query private var profiles: [UserProfile]
+
+    var onDeconnexion: () -> Void = {}
+    var onNouveauProfil: () -> Void = {}
 
     @State private var prenom: String = ""
     @State private var dateNaissance: Date = Calendar.current.date(byAdding: .year, value: -30, to: Date()) ?? Date()
@@ -18,6 +22,35 @@ struct ProfileView: View {
     @State private var claudeAPIKey: String = ""
     @State private var healthKitActif: Bool = false
 
+    // MARK: - Champs v2
+    @State private var silhouetteActuelle: String = ""
+    @State private var silhouetteObjectif: String = ""
+    @State private var dateObjectif: Date = Calendar.current.date(byAdding: .month, value: 6, to: Date()) ?? Date()
+    @State private var frequenceReevaluation: Int = 14
+    @State private var approcheTransformation: String = "normale"
+
+    // Sport
+    @State private var niveauSport: String = "debutant"
+    @State private var equipementSport: String = "salle"
+    @State private var frequenceEntrainement: Int = 3
+    @State private var dureeSeance: Int = 60
+    @State private var sportsAprecies: [String] = []
+
+    // Nutrition
+    @State private var regimeAlimentaire: String = "omnivore"
+    @State private var allergies: [String] = []
+    @State private var nbRepasJour: Int = 3
+    @State private var alimentsAimes: String = ""
+    @State private var alimentsDetestes: String = ""
+
+    // Vie
+    @State private var qualiteSommeil: Int = 3
+    @State private var dureeSommeil: Double = 7.0
+    @State private var niveauStress: Int = 3
+    @State private var alcool: String = "jamais"
+    @State private var tabac: Bool = false
+    @State private var hydratation: Double = 1.5
+
     @State private var healthKitService = HealthKitService()
     @State private var showAPIKeyHelp = false
     @State private var isSaved = false
@@ -27,6 +60,10 @@ struct ProfileView: View {
     @Query(sort: \BodyMetric.date, order: .reverse) private var metrics: [BodyMetric]
     @Query private var entries: [FoodEntry]
     @Query private var activites: [ActivityEntry]
+
+    private var profilActif: UserProfile? {
+        profiles.first(where: { $0.profileID.uuidString == activeProfileID })
+    }
 
     private var dernierPoids: Double { metrics.first?.weight ?? 0 }
 
@@ -44,11 +81,21 @@ struct ProfileView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: Spacing.lg) {
+                // 1. Qui suis-je
                 informationsSection
+                // 2. Corps & silhouette (actuelle → objectif + date + réévaluation)
+                silhouetteSection
+                // 3. Objectifs & macros (TDEE + macros)
                 objectifsSection
                 macrosSection
+                // 4. Mode de vie (sport → nutrition → vie)
+                sportSection
+                nutritionSection
+                vieSection
+                // 5. Outils
                 coachIASection
                 healthKitSection
+                // 6. Compte
                 statsSection
                 compteSection
             }
@@ -70,7 +117,13 @@ struct ProfileView: View {
             }
         }
         .onAppear { chargerProfil() }
-        .onChange(of: profiles.count) { _, _ in chargerProfil() }
+        .onChange(of: activeProfileID)         { _, _ in chargerProfil() }
+        // Recalcul instantané des macros quand l'approche ou la cible changent
+        .onChange(of: approcheTransformation)  { _, _ in recalculerMacros() }
+        .onChange(of: silhouetteObjectif)      { _, _ in recalculerMacros() }
+        .onChange(of: silhouetteActuelle)      { _, _ in recalculerMacros() }
+        .onChange(of: dateObjectif)            { _, _ in recalculerMacros() }
+        .onChange(of: niveauActivite)          { _, _ in recalculerMacros() }
     }
 
     // MARK: - Informations personnelles
@@ -108,6 +161,171 @@ struct ProfileView: View {
                         .frame(width: 60)
                     Text("kg").foregroundStyle(.secondary)
                 }
+            }
+        }
+    }
+
+    // MARK: - Corps & Silhouette (v2)
+
+    private var silhouetteSection: some View {
+        profileSection(titre: "Corps & Silhouette", icone: "figure.arms.open", couleur: .teal) {
+            // Silhouette actuelle
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                HStack(spacing: 6) {
+                    Image(systemName: "person.fill").foregroundStyle(.secondary).font(.caption)
+                    Text("Silhouette actuelle").font(.nutriBody)
+                }
+                SilhouettePicker(
+                    sexe: Sexe(rawValue: sexe) ?? .homme,
+                    selection: $silhouetteActuelle
+                )
+                .frame(height: 130)
+            }
+
+            Divider()
+
+            // Silhouette objectif
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                HStack(spacing: 6) {
+                    Image(systemName: "target").foregroundStyle(Color.nutriGreen).font(.caption)
+                    Text("Silhouette objectif").font(.nutriBody)
+                }
+                SilhouettePicker(
+                    sexe: Sexe(rawValue: sexe) ?? .homme,
+                    selection: $silhouetteObjectif
+                )
+                .frame(height: 130)
+            }
+
+            Divider()
+            profileRow("Date objectif") {
+                DatePicker("", selection: $dateObjectif, in: Date()..., displayedComponents: .date)
+                    .labelsHidden()
+            }
+            Divider()
+            profileRow("Réévaluation") {
+                Stepper("\(frequenceReevaluation) jours", value: $frequenceReevaluation, in: 7...60, step: 7)
+            }
+            Divider()
+            // Approche de transformation — aperçu réactif complet
+            ApprochePreviewCard(
+                poids:               dernierPoids > 0 ? dernierPoids : objectifPoids,
+                taille:              taille,
+                age:                 dateNaissance.age,
+                sexe:                sexe,
+                niveauActivite:      niveauActivite,
+                silhouetteActuelle:  silhouetteActuelle,
+                silhouetteObjectif:  silhouetteObjectif,
+                dateObjectif:        dateObjectif,
+                approcheTransformation: $approcheTransformation
+            )
+            .padding(.vertical, Spacing.xs)
+        }
+    }
+
+    // MARK: - Sport (v2)
+
+    private var sportSection: some View {
+        profileSection(titre: "Sport & entraînement", icone: "dumbbell.fill", couleur: .orange) {
+            profileRow("Niveau") {
+                Picker("", selection: $niveauSport) {
+                    ForEach(NiveauSport.allCases, id: \.self) { n in
+                        Text(n.label).tag(n.rawValue)
+                    }
+                }
+                .labelsHidden().frame(width: 160)
+            }
+            Divider()
+            profileRow("Équipement") {
+                Picker("", selection: $equipementSport) {
+                    ForEach(EquipementSport.allCases, id: \.self) { e in
+                        Text(e.label).tag(e.rawValue)
+                    }
+                }
+                .labelsHidden().frame(width: 160)
+            }
+            Divider()
+            profileRow("Séances / semaine") {
+                Stepper("\(frequenceEntrainement)×", value: $frequenceEntrainement, in: 1...7)
+            }
+            Divider()
+            profileRow("Durée séance") {
+                Stepper("\(dureeSeance) min", value: $dureeSeance, in: 20...180, step: 10)
+            }
+        }
+    }
+
+    // MARK: - Nutrition (v2)
+
+    private var nutritionSection: some View {
+        profileSection(titre: "Alimentation", icone: "fork.knife", couleur: .nutriGreen) {
+            profileRow("Régime") {
+                Picker("", selection: $regimeAlimentaire) {
+                    ForEach(RegimeAlimentaire.allCases, id: \.self) { r in
+                        Text(r.label).tag(r.rawValue)
+                    }
+                }
+                .labelsHidden().frame(width: 160)
+            }
+            Divider()
+            profileRow("Repas / jour") {
+                Stepper("\(nbRepasJour)", value: $nbRepasJour, in: 2...6)
+            }
+            Divider()
+            profileRow("Aliments aimés") {
+                TextField("Ex: poulet, riz…", text: $alimentsAimes)
+                    .multilineTextAlignment(.trailing).frame(maxWidth: 200)
+            }
+            Divider()
+            profileRow("Aliments évités") {
+                TextField("Ex: poissons…", text: $alimentsDetestes)
+                    .multilineTextAlignment(.trailing).frame(maxWidth: 200)
+            }
+        }
+    }
+
+    // MARK: - Vie (v2)
+
+    private var vieSection: some View {
+        profileSection(titre: "Habitudes de vie", icone: "moon.fill", couleur: .indigo) {
+            profileRow("Qualité du sommeil") {
+                starPicker(value: $qualiteSommeil, color: .indigo)
+            }
+            Divider()
+            profileRow("Durée sommeil") {
+                Stepper("\(dureeSommeil.arrondi(1)) h", value: $dureeSommeil, in: 4...12, step: 0.5)
+            }
+            Divider()
+            profileRow("Niveau de stress") {
+                starPicker(value: $niveauStress, color: .red)
+            }
+            Divider()
+            profileRow("Alcool") {
+                Picker("", selection: $alcool) {
+                    ForEach(AlcoolHabitude.allCases, id: \.self) { a in
+                        Text(a.label).tag(a.rawValue)
+                    }
+                }
+                .labelsHidden().frame(width: 160)
+            }
+            Divider()
+            profileRow("Tabac") {
+                Toggle("", isOn: $tabac).labelsHidden()
+            }
+            Divider()
+            profileRow("Hydratation habituelle") {
+                Stepper("\(hydratation.arrondi(1)) L", value: $hydratation, in: 0.5...5.0, step: 0.25)
+            }
+        }
+    }
+
+    private func starPicker(value: Binding<Int>, color: Color) -> some View {
+        HStack(spacing: 4) {
+            ForEach(1...5, id: \.self) { i in
+                Image(systemName: i <= value.wrappedValue ? "star.fill" : "star")
+                    .foregroundStyle(i <= value.wrappedValue ? color : .secondary)
+                    .font(.caption)
+                    .onTapGesture { value.wrappedValue = i }
             }
         }
     }
@@ -294,8 +512,28 @@ struct ProfileView: View {
 
     private var compteSection: some View {
         profileSection(titre: "Compte", icone: "person.crop.circle", couleur: .gray) {
+            // Changer de profil
+            Button(action: onDeconnexion) {
+                Label("Changer de profil", systemImage: "person.2.fill")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .padding(.vertical, 4)
+
+            Divider()
+
+            // Ajouter un profil
+            Button(action: onNouveauProfil) {
+                Label("Créer un nouveau profil", systemImage: "person.badge.plus")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .padding(.vertical, 4)
+
+            Divider()
+
             Button(role: .destructive, action: { showResetConfirm = true }) {
-                Label("Réinitialiser le profil", systemImage: "person.crop.circle.badge.minus")
+                Label("Réinitialiser ce profil", systemImage: "person.crop.circle.badge.minus")
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
@@ -310,16 +548,16 @@ struct ProfileView: View {
             Divider()
 
             Button(role: .destructive, action: { showDeleteConfirm = true }) {
-                Label("Supprimer toutes les données", systemImage: "trash.fill")
+                Label("Supprimer ce profil", systemImage: "trash.fill")
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
             .padding(.vertical, 4)
-            .confirmationDialog("Supprimer toutes les données ?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
-                Button("Tout supprimer", role: .destructive) { supprimerToutesLesDonnees() }
+            .confirmationDialog("Supprimer ce profil ?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+                Button("Supprimer", role: .destructive) { supprimerCeProfil() }
                 Button("Annuler", role: .cancel) {}
             } message: {
-                Text("Toutes vos données seront définitivement supprimées.")
+                Text("Le profil de \(profilActif?.prenom ?? "cet utilisateur") sera définitivement supprimé. Les autres profils ne seront pas affectés.")
             }
         }
     }
@@ -353,6 +591,38 @@ struct ProfileView: View {
 
     // MARK: - Actions
 
+    /// Recalcule calories + macros à partir des @State courants, sans sauvegarder.
+    /// Appelé instantanément à chaque changement d'approche, silhouette ou date.
+    private func recalculerMacros() {
+        guard !silhouetteObjectif.isEmpty, taille > 0 else { return }
+        let poids = dernierPoids > 0 ? dernierPoids : objectifPoids
+        guard poids > 0 else { return }
+
+        let temp = UserProfile(
+            prenom: "", dateNaissance: dateNaissance,
+            sexe: sexe, taille: taille, niveauActivite: niveauActivite
+        )
+        temp.poidsActuel            = poids
+        temp.silhouetteActuelle     = silhouetteActuelle
+        temp.silhouetteObjectif     = silhouetteObjectif
+        temp.dateObjectif           = dateObjectif
+        temp.approcheTransformation = approcheTransformation
+
+        let obj = NutritionCalculator.objectifsCaloriques(profil: temp)
+        let mac = NutritionCalculator.macrosCiblesTransformation(
+            calories:   obj.objectifTransformation,
+            poidsKg:    poids,
+            ajustement: obj.ajustement,
+            approche:   temp.approcheEnum
+        )
+        withAnimation(.easeInOut(duration: 0.25)) {
+            objectifCalorique = obj.objectifTransformation
+            objectifProteines = mac.proteines
+            objectifGlucides  = mac.glucides
+            objectifLipides   = mac.lipides
+        }
+    }
+
     private func appliquerTDEE() {
         objectifCalorique = tdeeCalcule
         let macros = NutritionCalculator.macrosCibles(calories: tdeeCalcule)
@@ -362,24 +632,22 @@ struct ProfileView: View {
     }
 
     private func reinitialiserProfil() {
-        if let p = profiles.first {
+        if let p = profilActif {
             modelContext.delete(p)
             try? modelContext.save()
         }
     }
 
-    private func supprimerToutesLesDonnees() {
-        try? modelContext.delete(model: FoodEntry.self)
-        try? modelContext.delete(model: BodyMetric.self)
-        try? modelContext.delete(model: ActivityEntry.self)
-        try? modelContext.delete(model: MealPlan.self)
-        try? modelContext.delete(model: FoodItem.self)
-        try? modelContext.delete(model: UserProfile.self)
+    /// Supprime uniquement le profil actif — les autres profils ne sont pas affectés.
+    private func supprimerCeProfil() {
+        guard let p = profilActif else { return }
+        modelContext.delete(p)
         try? modelContext.save()
+        onDeconnexion()
     }
 
     private func chargerProfil() {
-        guard let p = profiles.first else { return }
+        guard let p = profilActif else { return }
         prenom            = p.prenom
         dateNaissance     = p.dateNaissance
         sexe              = p.sexe
@@ -392,10 +660,33 @@ struct ProfileView: View {
         objectifLipides   = p.objectifLipides
         claudeAPIKey      = p.claudeAPIKey
         healthKitActif    = p.healthKitActif
+
+        // v2
+        silhouetteActuelle    = p.silhouetteActuelle
+        silhouetteObjectif    = p.silhouetteObjectif
+        dateObjectif          = p.dateObjectif
+        frequenceReevaluation = p.frequenceReevaluation
+        approcheTransformation = p.approcheTransformation
+        niveauSport          = p.niveauSport
+        equipementSport      = p.equipementSport
+        frequenceEntrainement = p.frequenceEntrainementJours
+        dureeSeance          = p.dureeSeanceMinutes
+        sportsAprecies       = p.sportsAprecies
+        regimeAlimentaire    = p.regimeAlimentaire
+        allergies            = p.allergies
+        nbRepasJour          = p.nbRepasJour
+        alimentsAimes        = p.alimentsAimes
+        alimentsDetestes     = p.alimentsDetestes
+        qualiteSommeil       = p.qualiteSommeil
+        dureeSommeil         = p.dureeSommeilHeures
+        niveauStress         = p.niveauStress
+        alcool               = p.alcool
+        tabac                = p.tabac
+        hydratation          = p.hydratationHabituelleLitres
     }
 
     private func sauvegarder() {
-        let p = profiles.first ?? {
+        let p = profilActif ?? {
             let nouveau = UserProfile()
             modelContext.insert(nouveau)
             return nouveau
@@ -412,6 +703,45 @@ struct ProfileView: View {
         p.objectifLipides   = objectifLipides
         p.claudeAPIKey      = claudeAPIKey
         p.healthKitActif    = healthKitActif
+
+        // v2
+        p.silhouetteActuelle        = silhouetteActuelle
+        p.silhouetteObjectif        = silhouetteObjectif
+        p.dateObjectif              = dateObjectif
+        p.frequenceReevaluation     = frequenceReevaluation
+        p.approcheTransformation    = approcheTransformation
+        p.niveauSport                = niveauSport
+        p.equipementSport            = equipementSport
+        p.frequenceEntrainementJours = frequenceEntrainement
+        p.dureeSeanceMinutes         = dureeSeance
+        p.sportsAprecies             = sportsAprecies
+        p.regimeAlimentaire          = regimeAlimentaire
+        p.allergies                  = allergies
+        p.nbRepasJour                = nbRepasJour
+        p.alimentsAimes              = alimentsAimes
+        p.alimentsDetestes           = alimentsDetestes
+        p.qualiteSommeil             = qualiteSommeil
+        p.dureeSommeilHeures         = dureeSommeil
+        p.niveauStress               = niveauStress
+        p.alcool                     = alcool
+        p.tabac                      = tabac
+        p.hydratationHabituelleLitres = hydratation
+
+        // Recalcule automatiquement les objectifs si un objectif silhouette est défini
+        if !p.silhouetteObjectif.isEmpty {
+            let objectifs = NutritionCalculator.objectifsCaloriques(profil: p)
+            let macros = NutritionCalculator.macrosCiblesTransformation(
+                calories:   objectifs.objectifTransformation,
+                poidsKg:    p.poidsActuel,
+                ajustement: objectifs.ajustement,
+                approche:   p.approcheEnum
+            )
+            p.objectifCalorique = objectifs.objectifTransformation
+            p.objectifProteines = macros.proteines
+            p.objectifGlucides  = macros.glucides
+            p.objectifLipides   = macros.lipides
+        }
+
         try? modelContext.save()
         withAnimation { isSaved = true }
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {

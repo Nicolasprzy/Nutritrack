@@ -86,12 +86,19 @@ class MealPlanViewModel {
         isGenerating = true
         defer { isGenerating = false }
 
+        let objTransfo = NutritionCalculator.objectifsCaloriques(profil: profil)
+        let macTransfo = NutritionCalculator.macrosCiblesTransformation(
+            calories:   objTransfo.objectifTransformation,
+            poidsKg:    profil.poidsActuel,
+            ajustement: objTransfo.ajustement,
+            approche:   profil.approcheEnum
+        )
         let contexte = ContexteNutritionnel(
             prenom:            profil.prenom,
-            objectifCalorique: profil.objectifCalorique,
-            objectifProteines: profil.objectifProteines,
-            objectifGlucides:  profil.objectifGlucides,
-            objectifLipides:   profil.objectifLipides,
+            objectifCalorique: objTransfo.objectifTransformation,
+            objectifProteines: macTransfo.proteines,
+            objectifGlucides:  macTransfo.glucides,
+            objectifLipides:   macTransfo.lipides,
             resumeSemaine:     "Génération d'un nouveau plan",
             tendancePoids:     "",
             dernierPoids:      0

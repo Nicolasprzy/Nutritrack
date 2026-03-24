@@ -8,33 +8,48 @@ class AICoachViewModel {
     var messages: [ClaudeMessage] = []
     var messageEnCours: String = ""
     var isTyping: Bool = false
-    var hasLoadedContext = false
+    var estInitialise: Bool = false
 
     let service = ClaudeAIService()
-
     private var contexteCache: ContexteNutritionnel?
 
-    // MARK: - Initialisation avec contexte
+    // MARK: - Chargement de l'historique persisté
 
-    func initialiser(profil: UserProfile, context: ModelContext) async {
-        guard !hasLoadedContext else { return }
+    func chargerHistorique(profil: UserProfile) {
+        guard !estInitialise else { return }
+        estInitialise = true
+
+        let json = profil.aiHistoriqueJSON
+        guard !json.isEmpty,
+              let data = json.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode([ClaudeMessage].self, from: data)
+        else { return }
+
+        messages = decoded
+    }
+
+    private func sauvegarderHistorique(profil: UserProfile, context: ModelContext) {
+        guard let data = try? JSONEncoder().encode(messages),
+              let json = String(data: data, encoding: .utf8)
+        else { return }
+        profil.aiHistoriqueJSON = json
+        try? context.save()
+    }
+
+    // MARK: - Analyse manuelle (déclenchée par l'utilisateur)
+
+    func lancerAnalyse(profil: UserProfile, context: ModelContext) async {
         guard profil.aUneCleAPI else { return }
 
-        hasLoadedContext = true
-        let contexte = construireContexte(profil: profil, context: context)
-        contexteCache = contexte
-
+        contexteCache = construireContexte(profil: profil, context: context)
         isTyping = true
 
-        let analyse = await service.analyseProactive(contexte: contexte, apiKey: profil.claudeAPIKey)
+        let analyse = await service.analyseProactive(contexte: contexteCache!, apiKey: profil.claudeAPIKey)
         isTyping = false
 
         if let texte = analyse {
-            let msg = ClaudeMessage(role: "assistant", content: texte)
-            messages.append(msg)
-        } else if let erreur = service.errorMessage {
-            let msg = ClaudeMessage(role: "assistant", content: "⚠️ \(erreur)")
-            messages.append(msg)
+            messages.append(ClaudeMessage(role: "assistant", content: texte))
+            sauvegarderHistorique(profil: profil, context: context)
         }
     }
 
@@ -42,11 +57,9 @@ class AICoachViewModel {
 
     func envoyerMessage(profil: UserProfile, context: ModelContext) async {
         let texte = messageEnCours.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !texte.isEmpty else { return }
-        guard profil.aUneCleAPI else { return }
+        guard !texte.isEmpty, profil.aUneCleAPI else { return }
 
-        let msgUser = ClaudeMessage(role: "user", content: texte)
-        messages.append(msgUser)
+        messages.append(ClaudeMessage(role: "user", content: texte))
         messageEnCours = ""
 
         if contexteCache == nil {
@@ -54,22 +67,30 @@ class AICoachViewModel {
         }
 
         isTyping = true
-
         let reponse = await service.envoyerMessage(
-            messages: messages.filter { $0.role == "user" || $0.role == "assistant" },
+            messages: messages,
             contexte: contexteCache!,
             apiKey: profil.claudeAPIKey
         )
-
         isTyping = false
 
-        if let texteReponse = reponse {
-            let msgAssistant = ClaudeMessage(role: "assistant", content: texteReponse)
-            messages.append(msgAssistant)
-        } else if let erreur = service.errorMessage {
-            let msgErreur = ClaudeMessage(role: "assistant", content: "⚠️ \(erreur)")
-            messages.append(msgErreur)
-        }
+        let contenu = reponse ?? "⚠️ \(service.errorMessage ?? "Erreur inconnue")"
+        messages.append(ClaudeMessage(role: "assistant", content: contenu))
+        sauvegarderHistorique(profil: profil, context: context)
+    }
+
+    func poserQuestion(_ question: String, profil: UserProfile, context: ModelContext) async {
+        messageEnCours = question
+        await envoyerMessage(profil: profil, context: context)
+    }
+
+    // MARK: - Effacer la conversation
+
+    func effacerConversation(profil: UserProfile, context: ModelContext) {
+        messages = []
+        contexteCache = nil
+        profil.aiHistoriqueJSON = ""
+        try? context.save()
     }
 
     // MARK: - Questions suggérées
@@ -83,11 +104,6 @@ class AICoachViewModel {
         "Que manger avant l'entraînement ?"
     ]
 
-    func poserQuestion(_ question: String, profil: UserProfile, context: ModelContext) async {
-        messageEnCours = question
-        await envoyerMessage(profil: profil, context: context)
-    }
-
     // MARK: - Contexte nutritionnel
 
     private func construireContexte(profil: UserProfile, context: ModelContext) -> ContexteNutritionnel {
@@ -100,46 +116,42 @@ class AICoachViewModel {
                 predicate: #Predicate<FoodEntry> { $0.date >= debut && $0.date <= fin }
             )
             let entries = (try? context.fetch(descriptor)) ?? []
-            let cal  = entries.reduce(0) { $0 + $1.calories }
-            let prot = entries.reduce(0) { $0 + $1.proteins }
-            let gluc = entries.reduce(0) { $0 + $1.carbohydrates }
-            let lip  = entries.reduce(0) { $0 + $1.fats }
-
+            let cal  = entries.reduce(0.0) { $0 + $1.calories }
+            let prot = entries.reduce(0.0) { $0 + $1.proteins }
+            let gluc = entries.reduce(0.0) { $0 + $1.carbohydrates }
+            let lip  = entries.reduce(0.0) { $0 + $1.fats }
             if cal > 0 {
-                resumeJours.append(
-                    "\(jour.formatLong) : \(cal.arrondi(0)) kcal (P:\(prot.arrondi(0))g G:\(gluc.arrondi(0))g L:\(lip.arrondi(0))g)"
-                )
+                resumeJours.append("\(jour.formatLong) : \(cal.arrondi(0)) kcal (P:\(prot.arrondi(0))g G:\(gluc.arrondi(0))g L:\(lip.arrondi(0))g)")
             }
         }
 
-        let metricsDesc = FetchDescriptor<BodyMetric>(
-            sortBy: [SortDescriptor(\.date, order: .reverse)]
-        )
+        let metricsDesc = FetchDescriptor<BodyMetric>(sortBy: [SortDescriptor(\.date, order: .reverse)])
         let metrics = (try? context.fetch(metricsDesc)) ?? []
         let dernierPoids = metrics.first?.weight ?? 0
         let tendance: String
         if metrics.count >= 2 {
             let diff = metrics[0].weight - metrics[metrics.count - 1].weight
-            tendance = diff > 0 ? "Prise de \(diff.arrondi(1)) kg sur la période" : "Perte de \(abs(diff).arrondi(1)) kg sur la période"
+            tendance = diff > 0 ? "Prise de \(diff.arrondi(1)) kg" : "Perte de \(abs(diff).arrondi(1)) kg"
         } else {
             tendance = "Données insuffisantes"
         }
 
+        let objTransfo = NutritionCalculator.objectifsCaloriques(profil: profil)
+        let macTransfo = NutritionCalculator.macrosCiblesTransformation(
+            calories:   objTransfo.objectifTransformation,
+            poidsKg:    profil.poidsActuel,
+            ajustement: objTransfo.ajustement,
+            approche:   profil.approcheEnum
+        )
         return ContexteNutritionnel(
             prenom:            profil.prenom,
-            objectifCalorique: profil.objectifCalorique,
-            objectifProteines: profil.objectifProteines,
-            objectifGlucides:  profil.objectifGlucides,
-            objectifLipides:   profil.objectifLipides,
+            objectifCalorique: objTransfo.objectifTransformation,
+            objectifProteines: macTransfo.proteines,
+            objectifGlucides:  macTransfo.glucides,
+            objectifLipides:   macTransfo.lipides,
             resumeSemaine:     resumeJours.isEmpty ? "Aucun repas enregistré cette semaine." : resumeJours.joined(separator: "\n"),
             tendancePoids:     tendance,
             dernierPoids:      dernierPoids
         )
-    }
-
-    func effacerConversation() {
-        messages = []
-        hasLoadedContext = false
-        contexteCache = nil
     }
 }

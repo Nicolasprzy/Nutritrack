@@ -5,6 +5,8 @@ struct WeightChartView: View {
     let donnees: [(date: Date, poids: Double)]
     var showArea: Bool = true
 
+    @State private var chartProgress: Double = 0
+
     private var minPoids: Double {
         (donnees.min(by: { $0.poids < $1.poids })?.poids ?? 60) - 2
     }
@@ -72,52 +74,23 @@ struct WeightChartView: View {
                 }
             }
             .frame(height: 200)
-            .animation(.easeInOut(duration: 0.5), value: donnees.count)
+            .opacity(chartProgress)
+            .scaleEffect(CGSize(width: 1.0, height: chartProgress), anchor: .bottom)
+            .onAppear {
+                chartProgress = 0
+                withAnimation(.easeOut(duration: 0.7).delay(0.1)) { chartProgress = 1.0 }
+            }
+            .onChange(of: donnees.count) {
+                chartProgress = 0
+                withAnimation(.easeOut(duration: 0.7)) { chartProgress = 1.0 }
+            }
         }
     }
 }
 
 // MARK: - Mini graphique (pour la grille 2x2)
 
-struct MiniChartView: View {
-    let titre: String
-    let donnees: [(date: Date, valeur: Double)]
-    let couleur: Color
-    let unite: String
-
-    var body: some View {
-        GlassCard(padding: Spacing.md) {
-            VStack(alignment: .leading, spacing: Spacing.sm) {
-                Text(titre)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                if donnees.isEmpty {
-                    Text("—")
-                        .font(.nutriTitle2)
-                        .foregroundStyle(.tertiary)
-                    Spacer()
-                } else {
-                    Text("\(donnees.last!.valeur.arrondi(1)) \(unite)")
-                        .font(.nutriTitle2)
-                        .foregroundStyle(couleur)
-
-                    Chart(donnees, id: \.date) { point in
-                        LineMark(
-                            x: .value("Date", point.date),
-                            y: .value("Valeur", point.valeur)
-                        )
-                        .interpolationMethod(.catmullRom)
-                        .foregroundStyle(couleur)
-                    }
-                    .chartXAxis(.hidden)
-                    .chartYAxis(.hidden)
-                    .frame(height: 50)
-                }
-            }
-        }
-    }
-}
+// MiniChartView défini dans BodyTrackingView.swift
 
 #Preview {
     let donnees: [(date: Date, poids: Double)] = (0..<30).map { i in

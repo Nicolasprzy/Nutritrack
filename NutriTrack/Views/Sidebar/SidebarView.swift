@@ -3,9 +3,10 @@ import SwiftData
 
 struct SidebarView: View {
     @Binding var selection: SidebarItem?
+    @Environment(\.activeProfileID) private var activeProfileID
     @Query private var profiles: [UserProfile]
 
-    var profil: UserProfile? { profiles.first }
+    var profil: UserProfile? { profiles.first(where: { $0.profileID.uuidString == activeProfileID }) }
 
     var body: some View {
         List(selection: $selection) {
@@ -37,7 +38,7 @@ struct SidebarView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(profil.prenom.isEmpty ? "Mon profil" : profil.prenom)
                     .font(.nutriHeadline)
-                Text("\(profil.objectifCalorique.arrondi(0)) kcal/jour")
+                Text("\(NutritionCalculator.objectifsCaloriques(profil: profil).objectifTransformation.arrondi(0)) kcal/jour")
                     .font(.nutriCaption)
                     .foregroundStyle(.secondary)
             }

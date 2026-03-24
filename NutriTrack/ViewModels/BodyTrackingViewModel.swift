@@ -25,12 +25,21 @@ class BodyTrackingViewModel {
 
     // MARK: - Chargement
 
-    func charger(context: ModelContext) {
+    func charger(context: ModelContext, profileID: String = "") {
         let debut = Date.ilYaJours(periode.jours)
-        let descriptor = FetchDescriptor<BodyMetric>(
-            predicate: #Predicate<BodyMetric> { $0.date >= debut },
-            sortBy: [SortDescriptor(\.date)]
-        )
+        let pid = profileID
+        let descriptor: FetchDescriptor<BodyMetric>
+        if pid.isEmpty {
+            descriptor = FetchDescriptor<BodyMetric>(
+                predicate: #Predicate<BodyMetric> { $0.date >= debut },
+                sortBy: [SortDescriptor(\.date)]
+            )
+        } else {
+            descriptor = FetchDescriptor<BodyMetric>(
+                predicate: #Predicate<BodyMetric> { $0.date >= debut && $0.profileID == pid },
+                sortBy: [SortDescriptor(\.date)]
+            )
+        }
         metrics = (try? context.fetch(descriptor)) ?? []
     }
 
@@ -72,12 +81,28 @@ class BodyTrackingViewModel {
         metrics.filter { $0.hips > 0 }.map { ($0.date, $0.hips) }
     }
 
+    var donneesPoitrine: [(date: Date, valeur: Double)] {
+        metrics.filter { $0.chest > 0 }.map { ($0.date, $0.chest) }
+    }
+
+    var donneesBras: [(date: Date, valeur: Double)] {
+        metrics.filter { $0.armRight > 0 }.map { ($0.date, $0.armRight) }
+    }
+
+    var donneesCuisse: [(date: Date, valeur: Double)] {
+        metrics.filter { $0.thigh > 0 }.map { ($0.date, $0.thigh) }
+    }
+
     var donneesIMC: [(date: Date, valeur: Double)] {
         metrics.filter { $0.bmi > 0 }.map { ($0.date, $0.bmi) }
     }
 
     var donneesMasseGrasse: [(date: Date, valeur: Double)] {
         metrics.filter { $0.bodyFatPercentage > 0 }.map { ($0.date, $0.bodyFatPercentage) }
+    }
+
+    var derniereMensuration: BodyMetric? {
+        metrics.reversed().first { $0.aMensurations }
     }
 
     // MARK: - Ajout
@@ -87,22 +112,30 @@ class BodyTrackingViewModel {
         bmi: Double,
         tourTaille: Double,
         tourHanches: Double,
+        poitrine: Double,
+        bras: Double,
+        cuisse: Double,
         masseGrasse: Double,
         notes: String,
+        profileID: String = "",
         context: ModelContext
     ) {
         let metric = BodyMetric(
-            date:                Date(),
-            weight:              poids,
-            bmi:                 bmi,
-            waist:               tourTaille,
-            hips:                tourHanches,
-            bodyFatPercentage:   masseGrasse,
-            notes:               notes
+            date:               Date(),
+            weight:             poids,
+            bmi:                bmi,
+            waist:              tourTaille,
+            hips:               tourHanches,
+            chest:              poitrine,
+            armRight:           bras,
+            thigh:              cuisse,
+            bodyFatPercentage:  masseGrasse,
+            notes:              notes
         )
+        metric.profileID = profileID
         context.insert(metric)
         try? context.save()
-        charger(context: context)
+        charger(context: context, profileID: profileID)
     }
 
     // MARK: - Suppression

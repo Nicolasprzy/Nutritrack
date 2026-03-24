@@ -3,11 +3,12 @@ import SwiftData
 
 struct AICoachView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.activeProfileID) private var activeProfileID
     @Query private var profiles: [UserProfile]
 
     @State private var viewModel = AICoachViewModel()
 
-    var profil: UserProfile? { profiles.first }
+    var profil: UserProfile? { profiles.first(where: { $0.profileID.uuidString == activeProfileID }) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -21,18 +22,21 @@ struct AICoachView: View {
         .background(Color.fondPrincipal)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button(action: { viewModel.effacerConversation() }) {
+                Button(action: {
+                    if let p = profil {
+                        viewModel.effacerConversation(profil: p, context: modelContext)
+                    }
+                }) {
                     Image(systemName: "trash")
                         .foregroundStyle(.secondary)
                 }
                 .accessibilityLabel("Effacer la conversation")
+                .disabled(viewModel.messages.isEmpty)
             }
         }
         .onAppear {
             if let p = profil {
-                Task {
-                    await viewModel.initialiser(profil: p, context: modelContext)
-                }
+                viewModel.chargerHistorique(profil: p)
             }
         }
     }
@@ -41,7 +45,6 @@ struct AICoachView: View {
 
     private var chatInterface: some View {
         VStack(spacing: 0) {
-            // Messages
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: Spacing.sm) {
@@ -76,12 +79,12 @@ struct AICoachView: View {
 
             Divider()
 
-            // Questions suggérées
-            if viewModel.messages.isEmpty {
-                questionsSuggerees
+            if viewModel.messages.isEmpty && !viewModel.isTyping {
+                analyseEtQuestions
+            } else if !viewModel.messages.isEmpty {
+                questionsRapides
             }
 
-            // Barre de saisie
             barreDeMessage
         }
     }
@@ -108,10 +111,7 @@ struct AICoachView: View {
                     message.isUser
                         ? Color.nutriGreen.opacity(0.25)
                         : Color(.secondarySystemFill)
-                    , in: RoundedRectangle(
-                        cornerRadius: message.isUser ? 18 : 18,
-                        style: .continuous
-                    )
+                    , in: RoundedRectangle(cornerRadius: 18, style: .continuous)
                 )
                 .frame(maxWidth: 320, alignment: message.isUser ? .trailing : .leading)
 
@@ -150,7 +150,7 @@ struct AICoachView: View {
         .id("typing")
     }
 
-    // MARK: - Accueil (vide)
+    // MARK: - Accueil (conversation vide)
 
     private var accueilView: some View {
         VStack(spacing: Spacing.lg) {
@@ -161,7 +161,7 @@ struct AICoachView: View {
             Text("Bonjour\(profil.map { ", \($0.prenomAffiche)" } ?? "") !")
                 .font(.nutriTitle)
 
-            Text("Je suis NutriCoach, votre assistant nutritionnel IA.\nPosez-moi vos questions ou laissez-moi analyser votre semaine.")
+            Text("Je suis NutriCoach, votre assistant nutritionnel IA.\nPosez-moi vos questions ou lancez une analyse de votre semaine.")
                 .font(.nutriBody)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -169,9 +169,30 @@ struct AICoachView: View {
         .padding(.top, Spacing.xl)
     }
 
-    // MARK: - Questions suggérées
+    // MARK: - Bouton analyse + questions (état vide)
 
-    private var questionsSuggerees: some View {
+    private var analyseEtQuestions: some View {
+        VStack(spacing: Spacing.sm) {
+            Button(action: {
+                if let p = profil {
+                    Task { await viewModel.lancerAnalyse(profil: p, context: modelContext) }
+                }
+            }) {
+                Label("Analyser ma semaine", systemImage: "waveform.path.ecg")
+                    .font(.nutriHeadline)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, Spacing.lg)
+                    .padding(.vertical, Spacing.sm)
+                    .background(Color.cyan, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .padding(.top, Spacing.sm)
+
+            questionsRapides
+        }
+    }
+
+    private var questionsRapides: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: Spacing.sm) {
                 ForEach(viewModel.questionsSuggerees, id: \.self) { question in
@@ -189,6 +210,7 @@ struct AICoachView: View {
                             .background(.ultraThinMaterial, in: Capsule())
                     }
                     .buttonStyle(.plain)
+                    .disabled(viewModel.isTyping)
                     .accessibilityLabel("Question suggérée : \(question)")
                 }
             }
@@ -206,9 +228,7 @@ struct AICoachView: View {
                 .padding(Spacing.sm)
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Radius.md))
                 .lineLimit(1...5)
-                .onSubmit {
-                    envoyerMessage()
-                }
+                .onSubmit { envoyerMessage() }
                 .accessibilityLabel("Champ de message")
 
             Button(action: envoyerMessage) {

@@ -18,6 +18,8 @@ class FoodItem {
     var imageURL: String = ""
     var source: String = "OpenFoodFacts"
     var lastUpdated: Date = Date()
+    var isFavorite: Bool = false
+    var dateLastConsumed: Date? = nil
 
     @Relationship(deleteRule: .cascade) var entries: [FoodEntry] = []
 

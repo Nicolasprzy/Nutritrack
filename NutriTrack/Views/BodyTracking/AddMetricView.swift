@@ -4,17 +4,24 @@ import SwiftData
 struct AddMetricView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.activeProfileID) private var activeProfileID
     @Query private var profiles: [UserProfile]
 
     @State private var viewModel = BodyTrackingViewModel()
     @State private var poids: Double = 75.0
     @State private var tourTaille: Double = 0
     @State private var tourHanches: Double = 0
+    @State private var poitrine: Double = 0
+    @State private var bras: Double = 0
+    @State private var cuisse: Double = 0
     @State private var masseGrasse: Double = 0
     @State private var notes: String = ""
     @State private var healthKitService = HealthKitService()
 
-    var profil: UserProfile? { profiles.first }
+    // Permet de vider le focus (commit la valeur active du TextField) avant de sauvegarder
+    @FocusState private var champActif: Bool
+
+    var profil: UserProfile? { profiles.first(where: { $0.profileID.uuidString == activeProfileID }) }
 
     private var imc: Double {
         guard let p = profil, p.taille > 0, poids > 0 else { return 0 }
@@ -41,7 +48,7 @@ struct AddMetricView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Titre
+            // ── Titre ────────────────────────────────────────────────────
             HStack {
                 Text("Nouvelle mesure")
                     .font(.nutriTitle2)
@@ -58,15 +65,12 @@ struct AddMetricView: View {
             ScrollView {
                 VStack(spacing: Spacing.md) {
 
-                    // Poids
+                    // ── Poids + IMC ──────────────────────────────────────
                     GlassCard {
                         VStack(alignment: .leading, spacing: Spacing.sm) {
                             Label("Poids", systemImage: "scalemass.fill")
-                                .font(.nutriHeadline)
-                                .foregroundStyle(.blue)
-
+                                .font(.nutriHeadline).foregroundStyle(.blue)
                             Divider()
-
                             HStack {
                                 Text("Poids actuel")
                                 Spacer()
@@ -74,54 +78,50 @@ struct AddMetricView: View {
                                           format: .number.precision(.fractionLength(1)))
                                     .multilineTextAlignment(.trailing)
                                     .frame(width: 70)
+                                    .focused($champActif)
                                 Text("kg").foregroundStyle(.secondary)
                             }
-
-                            Slider(value: $poids, in: 30...200, step: 0.5)
-                                .tint(.blue)
-
+                            Slider(value: $poids, in: 30...200, step: 0.5).tint(.blue)
                             if imc > 0 {
                                 Divider()
                                 HStack {
                                     Text("IMC calculé")
                                     Spacer()
                                     Text(imc.arrondi(1))
-                                        .font(.nutriHeadline)
-                                        .foregroundStyle(imcCouleur)
+                                        .font(.nutriHeadline).foregroundStyle(imcCouleur)
                                     Text("— \(imcCategorie)")
-                                        .font(.nutriCaption)
-                                        .foregroundStyle(imcCouleur)
+                                        .font(.nutriCaption).foregroundStyle(imcCouleur)
                                 }
                             }
                         }
                     }
 
-                    // Mensurations
+                    // ── Mensurations ─────────────────────────────────────
                     GlassCard {
                         VStack(alignment: .leading, spacing: Spacing.sm) {
                             Label("Mensurations", systemImage: "ruler.fill")
-                                .font(.nutriHeadline)
-                                .foregroundStyle(.purple)
-
+                                .font(.nutriHeadline).foregroundStyle(.purple)
                             Divider()
-
-                            mensurationLigne("Tour de taille", value: $tourTaille, unite: "cm")
+                            mensurationLigne("Tour de taille",  value: $tourTaille,  unite: "cm")
                             Divider()
                             mensurationLigne("Tour de hanches", value: $tourHanches, unite: "cm")
                             Divider()
-                            mensurationLigne("Masse grasse", value: $masseGrasse, unite: "%")
+                            mensurationLigne("Poitrine",        value: $poitrine,    unite: "cm")
+                            Divider()
+                            mensurationLigne("Bras droit",      value: $bras,        unite: "cm")
+                            Divider()
+                            mensurationLigne("Cuisse",          value: $cuisse,      unite: "cm")
+                            Divider()
+                            mensurationLigne("Masse grasse",    value: $masseGrasse, unite: "%")
                         }
                     }
 
-                    // Notes
+                    // ── Notes ────────────────────────────────────────────
                     GlassCard {
                         VStack(alignment: .leading, spacing: Spacing.sm) {
                             Label("Notes", systemImage: "note.text")
-                                .font(.nutriHeadline)
-                                .foregroundStyle(.gray)
-
+                                .font(.nutriHeadline).foregroundStyle(.gray)
                             Divider()
-
                             TextEditor(text: $notes)
                                 .frame(minHeight: 60, maxHeight: 100)
                                 .font(.nutriBody)
@@ -133,19 +133,19 @@ struct AddMetricView: View {
 
             Divider()
 
-            // Bouton Enregistrer
+            // ── Bouton Enregistrer ───────────────────────────────────────
             HStack(spacing: Spacing.md) {
                 Spacer()
-                Button(action: enregistrer) {
+                Button {
+                    // Vide le focus → commit la valeur active du TextField avant lecture
+                    champActif = false
+                    DispatchQueue.main.async { enregistrer() }
+                } label: {
                     Text("Enregistrer")
-                        .font(.nutriHeadline)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, Spacing.xl)
-                        .padding(.vertical, Spacing.sm)
-                        .background(
-                            poids > 0 ? Color.nutriGreen : Color.gray,
-                            in: RoundedRectangle(cornerRadius: Radius.md)
-                        )
+                        .font(.nutriHeadline).foregroundStyle(.white)
+                        .padding(.horizontal, Spacing.xl).padding(.vertical, Spacing.sm)
+                        .background(poids > 0 ? Color.blue : Color.gray,
+                                    in: RoundedRectangle(cornerRadius: Radius.md))
                 }
                 .buttonStyle(.plain)
                 .disabled(poids <= 0)
@@ -153,9 +153,13 @@ struct AddMetricView: View {
             .padding(Spacing.lg)
             .background(.ultraThinMaterial)
         }
-        .frame(minWidth: 440, idealWidth: 500, minHeight: 500)
+        .frame(minWidth: 440, idealWidth: 500, minHeight: 560)
+        .onAppear { poids = profil?.poidsActuel ?? 75.0 }
     }
 
+    // MARK: - Ligne de mensuration
+
+    /// `@FocusState` est accessible directement via `$champActif` dans les méthodes du struct
     private func mensurationLigne(_ label: String, value: Binding<Double>, unite: String) -> some View {
         HStack {
             Text(label)
@@ -163,20 +167,30 @@ struct AddMetricView: View {
             TextField("0", value: value, format: .number.precision(.fractionLength(1)))
                 .multilineTextAlignment(.trailing)
                 .frame(width: 70)
+                .focused($champActif)   // commit au tap sur "Enregistrer"
             Text(unite).foregroundStyle(.secondary).frame(width: 28, alignment: .leading)
         }
     }
 
+    // MARK: - Sauvegarde
+
     private func enregistrer() {
         viewModel.ajouterMetric(
-            poids: poids,
-            bmi: imc,
-            tourTaille: tourTaille,
+            poids:       poids,
+            bmi:         imc,
+            tourTaille:  tourTaille,
             tourHanches: tourHanches,
+            poitrine:    poitrine,
+            bras:        bras,
+            cuisse:      cuisse,
             masseGrasse: masseGrasse,
-            notes: notes,
-            context: modelContext
+            notes:       notes,
+            profileID:   activeProfileID,
+            context:     modelContext
         )
+        if let p = profil { p.poidsActuel = poids }
+        try? modelContext.save()
+
         if healthKitService.isAvailable {
             Task {
                 _ = await healthKitService.demanderAutorisation()

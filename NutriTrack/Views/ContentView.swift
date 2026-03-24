@@ -5,28 +5,35 @@ struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var profiles: [UserProfile]
 
+    @AppStorage("activeProfileID") private var activeProfileID: String = ""
+    @State private var showNouvelOnboarding = false
     @State private var selection: SidebarItem? = .dashboard
-    @State private var showOnboarding = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+
+    private var activeProfile: UserProfile? {
+        profiles.first(where: { $0.profileID.uuidString == activeProfileID })
+    }
 
     var body: some View {
         Group {
-            if showOnboarding {
-                OnboardingView(onComplete: {
-                    showOnboarding = false
-                })
+            if showNouvelOnboarding {
+                // Création d'un nouveau profil supplémentaire
+                OnboardingView(onComplete: { showNouvelOnboarding = false })
+
+            } else if activeProfileID.isEmpty || activeProfile == nil {
+                // Aucun profil actif → sélecteur
+                ProfileSwitcherView(
+                    activeProfileID: $activeProfileID,
+                    onNouveauProfil: { showNouvelOnboarding = true }
+                )
+
+            } else if activeProfile?.onboardingV2Complete == false {
+                // Profil existant mais onboarding non terminé
+                OnboardingView(onComplete: {})
+
             } else {
                 mainContent
-            }
-        }
-        .onAppear {
-            if profiles.isEmpty {
-                showOnboarding = true
-            }
-        }
-        .onChange(of: profiles.isEmpty) { _, isEmpty in
-            if isEmpty {
-                showOnboarding = true
+                    .environment(\.activeProfileID, activeProfileID)
             }
         }
     }
@@ -34,9 +41,11 @@ struct ContentView: View {
     private var mainContent: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(selection: $selection)
+                .environment(\.activeProfileID, activeProfileID)
         } detail: {
             detailView
                 .animation(.easeInOut(duration: 0.2), value: selection)
+                .environment(\.activeProfileID, activeProfileID)
         }
         .navigationSplitViewStyle(.balanced)
     }
@@ -52,12 +61,14 @@ struct ContentView: View {
             BodyTrackingView()
         case .activite:
             ActivityView()
-        case .planRepas:
-            MealPlanView()
         case .coach:
             AICoachView()
         case .profil:
-            ProfileView()
+            ProfileView(onDeconnexion: {
+                activeProfileID = ""
+            }, onNouveauProfil: {
+                showNouvelOnboarding = true
+            })
         }
     }
 }

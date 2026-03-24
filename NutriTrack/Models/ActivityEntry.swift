@@ -3,6 +3,7 @@ import SwiftData
 
 @Model
 class ActivityEntry {
+    var profileID: String = ""            // UUID du UserProfile propriétaire
     var date: Date = Date()
     var activityType: String = ""   // "course", "marche", "musculation", "vélo", etc.
     var durationMinutes: Int = 0

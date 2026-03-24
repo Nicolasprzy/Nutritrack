@@ -4,6 +4,7 @@ import SwiftData
 struct AddActivityView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.activeProfileID) private var activeProfileID
     @Query(sort: \BodyMetric.date, order: .reverse) private var metrics: [BodyMetric]
 
     @State private var typeActivite: String = "Course à pied"
@@ -206,6 +207,7 @@ struct AddActivityView: View {
             caloriesBurned:  calcul_auto ? caloriesCalculees : caloriesBrulees,
             notes:           notes
         )
+        activite.profileID = activeProfileID
         modelContext.insert(activite)
         try? modelContext.save()
         dismiss()

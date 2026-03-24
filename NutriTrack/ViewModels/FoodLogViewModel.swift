@@ -11,14 +11,29 @@ class FoodLogViewModel {
     var mealTypeEnCours: String = "dejeuner"
     var isLoading: Bool = false
 
-    // MARK: - Chargement
+    // MARK: - Chargement (filtré par profil)
 
-    func charger(context: ModelContext) {
+    func charger(context: ModelContext, profileID: String = "") {
         let debut = dateSelectionnee.debutDeJour
         let fin   = dateSelectionnee.finDeJour
 
+        // Migration : si des enregistrements sans profileID existent, on les assigne
+        // au profil courant (migration one-shot depuis v1)
+        if !profileID.isEmpty {
+            let orphelins = (try? context.fetch(FetchDescriptor<FoodEntry>(
+                predicate: #Predicate<FoodEntry> { $0.profileID == "" }
+            ))) ?? []
+            if !orphelins.isEmpty {
+                orphelins.forEach { $0.profileID = profileID }
+                try? context.save()
+            }
+        }
+
+        let pid = profileID
         let descriptor = FetchDescriptor<FoodEntry>(
-            predicate: #Predicate<FoodEntry> { $0.date >= debut && $0.date <= fin },
+            predicate: #Predicate<FoodEntry> {
+                $0.date >= debut && $0.date <= fin && $0.profileID == pid
+            },
             sortBy: [SortDescriptor(\.date)]
         )
 
@@ -53,6 +68,7 @@ class FoodLogViewModel {
         foodItem: FoodItem,
         quantite: Double,
         mealType: String,
+        profileID: String = "",
         context: ModelContext
     ) {
         let entry = FoodEntry(
@@ -61,39 +77,39 @@ class FoodLogViewModel {
             quantity: quantite,
             foodItem: foodItem
         )
+        entry.profileID = profileID
         entry.calculerMacros()
         context.insert(entry)
 
-        // Mettre à jour lastUpdated du FoodItem
         foodItem.lastUpdated = Date()
 
         try? context.save()
-        charger(context: context)
+        charger(context: context, profileID: profileID)
     }
 
     // MARK: - Suppression
 
-    func supprimerEntree(_ entry: FoodEntry, context: ModelContext) {
+    func supprimerEntree(_ entry: FoodEntry, profileID: String = "", context: ModelContext) {
         context.delete(entry)
         try? context.save()
-        charger(context: context)
+        charger(context: context, profileID: profileID)
     }
 
     // MARK: - Navigation date
 
-    func jourSuivant(context: ModelContext) {
+    func jourSuivant(context: ModelContext, profileID: String = "") {
         if let demain = Calendar.current.date(byAdding: .day, value: 1, to: dateSelectionnee) {
             if demain <= Date() {
                 dateSelectionnee = demain
-                charger(context: context)
+                charger(context: context, profileID: profileID)
             }
         }
     }
 
-    func jourPrecedent(context: ModelContext) {
+    func jourPrecedent(context: ModelContext, profileID: String = "") {
         if let hier = Calendar.current.date(byAdding: .day, value: -1, to: dateSelectionnee) {
             dateSelectionnee = hier
-            charger(context: context)
+            charger(context: context, profileID: profileID)
         }
     }
 

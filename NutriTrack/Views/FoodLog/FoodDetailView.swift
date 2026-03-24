@@ -4,6 +4,7 @@ import SwiftData
 struct FoodDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.activeProfileID) private var activeProfileID
     @Query private var profiles: [UserProfile]
 
     let foodItem: FoodItem
@@ -210,10 +211,14 @@ struct FoodDetailView: View {
     // MARK: - Actions
 
     private func ajouterAuJournal() {
+        // Marque automatiquement l'aliment comme favori à chaque consommation
+        foodItem.isFavorite = true
+        foodItem.dateLastConsumed = Date()
         viewModel.ajouterEntree(
             foodItem: foodItem,
             quantite: quantite,
             mealType: mealType,
+            profileID: activeProfileID,
             context: modelContext
         )
         onAjoute?()
