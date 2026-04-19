@@ -30,6 +30,7 @@ struct AddFoodView: View {
         case recents   = "Récents"
         case recherche = "Recherche"
         case scanner   = "Scanner"
+        case manuel    = "Manuel"
 
         var icone: String {
             switch self {
@@ -37,9 +38,19 @@ struct AddFoodView: View {
             case .recherche: return "magnifyingglass"
             case .recents:   return "clock.fill"
             case .scanner:   return "barcode.viewfinder"
+            case .manuel:    return "plus.circle.fill"
             }
         }
     }
+
+    // MARK: - État formulaire Manuel
+    @State private var manuelNom: String = ""
+    @State private var manuelMarque: String = ""
+    @State private var manuelCalories: Double? = nil
+    @State private var manuelProteines: Double? = nil
+    @State private var manuelGlucides: Double? = nil
+    @State private var manuelLipides: Double? = nil
+    @State private var manuelFibres: Double? = nil
 
     var body: some View {
         NavigationStack {
@@ -62,6 +73,7 @@ struct AddFoodView: View {
                     case .recherche: rechercheView
                     case .recents:   recentsView
                     case .scanner:   scannerView
+                    case .manuel:    manuelView
                     }
                 }
             }
@@ -173,6 +185,17 @@ struct AddFoodView: View {
                         systemImage: "fork.knife.circle",
                         description: Text("Essayez un autre terme ou vérifiez l'orthographe.")
                     )
+                    // Bouton créer manuellement
+                    Button(action: { ongletActif = .manuel }) {
+                        Label("Créer cet aliment manuellement", systemImage: "plus.circle.fill")
+                            .font(.nutriBody.bold())
+                            .frame(maxWidth: .infinity)
+                            .padding(Spacing.sm)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.nutriGreen)
+                    .padding(.horizontal, Spacing.md)
+
                     // Suggestions
                     VStack(alignment: .leading, spacing: 6) {
                         Text("💡 Astuces :")
@@ -265,6 +288,147 @@ struct AddFoodView: View {
         }
     }
 
+    // MARK: - Onglet Manuel
+
+    private var manuelView: some View {
+        ScrollView {
+            VStack(spacing: Spacing.md) {
+
+                // ── En-tête ──────────────────────────────────────────────
+                HStack(spacing: 8) {
+                    Image(systemName: "square.and.pencil")
+                        .foregroundStyle(Color.nutriGreen)
+                    Text("Créer un aliment")
+                        .font(.nutriHeadline)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, Spacing.md)
+                .padding(.top, Spacing.sm)
+
+                // ── Identité ─────────────────────────────────────────────
+                GlassCard {
+                    VStack(spacing: 0) {
+                        manuelLigne(label: "Nom *") {
+                            TextField("Ex. : Poulet grillé maison", text: $manuelNom)
+                                .multilineTextAlignment(.trailing)
+                        }
+                        Divider()
+                        manuelLigne(label: "Marque") {
+                            TextField("Optionnel", text: $manuelMarque)
+                                .multilineTextAlignment(.trailing)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .padding(.horizontal, Spacing.md)
+
+                // ── Valeurs pour 100 g ───────────────────────────────────
+                GlassCard {
+                    VStack(alignment: .leading, spacing: Spacing.sm) {
+                        Label("Valeurs pour 100 g", systemImage: "chart.bar.fill")
+                            .font(.nutriHeadline)
+                            .foregroundStyle(Color.nutriGreen)
+                        Divider()
+                        manuelLigneNutri(label: "Calories", unite: "kcal",
+                                         couleur: .orange, valeur: $manuelCalories)
+                        Divider()
+                        manuelLigneNutri(label: "Protéines", unite: "g",
+                                         couleur: .proteineColor, valeur: $manuelProteines)
+                        Divider()
+                        manuelLigneNutri(label: "Glucides", unite: "g",
+                                         couleur: .glucideColor, valeur: $manuelGlucides)
+                        Divider()
+                        manuelLigneNutri(label: "Lipides", unite: "g",
+                                         couleur: .lipideColor, valeur: $manuelLipides)
+                        Divider()
+                        manuelLigneNutri(label: "Fibres", unite: "g",
+                                         couleur: .secondary, valeur: $manuelFibres)
+                    }
+                }
+                .padding(.horizontal, Spacing.md)
+
+                // ── Bouton créer ─────────────────────────────────────────
+                Button(action: creerAlimentManuel) {
+                    Label("Créer et sélectionner", systemImage: "checkmark.circle.fill")
+                        .font(.nutriBody.bold())
+                        .frame(maxWidth: .infinity)
+                        .padding(Spacing.sm)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.nutriGreen)
+                .disabled(manuelNom.trimmingCharacters(in: .whitespaces).isEmpty
+                          || manuelCalories == nil)
+                .padding(.horizontal, Spacing.md)
+
+                Text("* Nom et calories sont obligatoires")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.bottom, Spacing.lg)
+        }
+    }
+
+    private func manuelLigne<Content: View>(label: String,
+                                            @ViewBuilder content: () -> Content) -> some View {
+        HStack {
+            Text(label).font(.nutriBody)
+            Spacer()
+            content()
+        }
+        .padding(.vertical, Spacing.xs)
+    }
+
+    private func manuelLigneNutri(label: String, unite: String,
+                                   couleur: Color, valeur: Binding<Double?>) -> some View {
+        HStack {
+            Circle()
+                .fill(couleur.opacity(0.2))
+                .frame(width: 8, height: 8)
+            Text(label).font(.nutriBody)
+            Spacer()
+            TextField("0", value: valeur, format: .number.precision(.fractionLength(1)))
+                .multilineTextAlignment(.trailing)
+                .frame(width: 70)
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .foregroundStyle(couleur)
+                #if os(iOS)
+                .keyboardType(.decimalPad)
+                #endif
+            Text(unite)
+                .font(.nutriCaption)
+                .foregroundStyle(.secondary)
+                .frame(width: 28, alignment: .leading)
+        }
+        .padding(.vertical, Spacing.xs)
+    }
+
+    private func creerAlimentManuel() {
+        let nom = manuelNom.trimmingCharacters(in: .whitespaces)
+        guard !nom.isEmpty, let cal = manuelCalories else { return }
+
+        let item = FoodItem(
+            name:           nom,
+            brand:          manuelMarque.trimmingCharacters(in: .whitespaces),
+            calories:       cal,
+            proteins:       manuelProteines ?? 0,
+            carbohydrates:  manuelGlucides  ?? 0,
+            fats:           manuelLipides   ?? 0
+        )
+        item.fiber  = manuelFibres ?? 0
+        item.source = "Manuel"
+        modelContext.insert(item)
+        try? modelContext.save()
+
+        // Ouvre directement FoodDetailView
+        foodSelectionne = item
+        showDetail = true
+
+        // Réinitialiser le formulaire
+        manuelNom = ""; manuelMarque = ""
+        manuelCalories = nil; manuelProteines = nil
+        manuelGlucides = nil; manuelLipides = nil; manuelFibres = nil
+    }
+
     // MARK: - Liste commune
 
     private func listeAliments(_ items: [FoodItem]) -> some View {
@@ -294,14 +458,27 @@ struct AddFoodView: View {
         .listStyle(.plain)
     }
 
+    /// Couleur selon la macro dominante (contribution calorique)
+    private func couleurMacroDominant(_ item: FoodItem) -> Color {
+        let calProt = item.proteins      * 4
+        let calGluc = item.carbohydrates * 4
+        let calLip  = item.fats          * 9
+        let maxVal  = max(calProt, calGluc, calLip)
+        guard maxVal > 0 else { return Color.nutriGreen }
+        if maxVal == calProt { return .proteineColor }
+        if maxVal == calLip  { return .lipideColor }
+        return .glucideColor
+    }
+
     private func ligneAliment(_ item: FoodItem) -> some View {
         HStack(spacing: Spacing.sm) {
+            let couleur = couleurMacroDominant(item)
             ZStack {
                 RoundedRectangle(cornerRadius: Radius.sm)
-                    .fill(Color.nutriGreen.opacity(0.12))
+                    .fill(couleur.opacity(0.12))
                     .frame(width: 44, height: 44)
                 Image(systemName: categorieIcone(item))
-                    .foregroundStyle(Color.nutriGreen)
+                    .foregroundStyle(couleur)
             }
 
             VStack(alignment: .leading, spacing: 2) {

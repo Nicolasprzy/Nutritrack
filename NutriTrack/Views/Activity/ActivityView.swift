@@ -141,7 +141,7 @@ struct ActivityView: View {
                                     .font(.nutriCaption).foregroundStyle(Color.nutriGreen)
                             } else {
                                 Button(action: {
-                                    viewModel.marquerSeanceFaite(jourId: seance.id, context: modelContext)
+                                    viewModel.marquerSeanceFaite(plan: plan, jourId: seance.id, profileID: activeProfileID, context: modelContext)
                                 }) {
                                     Text("Marquer faite")
                                         .font(.nutriCaption)

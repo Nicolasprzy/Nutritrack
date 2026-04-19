@@ -1037,21 +1037,17 @@ struct OnboardingView: View {
     private func evaluerFaisabilite() -> NiveauFaisabilite {
         guard !silhouetteObjectif.isEmpty else { return .realiste }
 
-        let semaines = max(1, Calendar.current.dateComponents(
-            [.weekOfYear], from: Date(), to: dateObjectif
-        ).weekOfYear ?? 1)
-
         let indexActuel = SilhouetteObjectif(rawValue: silhouetteActuelle)?.index ?? 2
         let indexCible  = SilhouetteObjectif(rawValue: silhouetteObjectif)?.index ?? 2
         let distance    = abs(indexActuel - indexCible)
 
         if distance == 0 { return .realiste }
 
-        // Déficit calorique quotidien estimé (4.5 kg par écart de silhouette × 7 700 kcal/kg)
-        let kgEstimes    = Double(distance) * 4.5
-        let kcalParJour  = (kgEstimes * 7_700) / (Double(semaines) * 7.0)
+        // Déficit effectif selon l'approche choisie (remplace le brut kg/semaines)
+        let appr        = ApprocheTransformation(rawValue: approcheTransformation) ?? .normale
+        let kcalParJour = appr.deficitMaxKcal
 
-        // Score de base
+        // Score de base — l'approche choisie détermine le niveau de risque
         var score: Double
         switch kcalParJour {
         case ..<301:  score = 0.0
@@ -1092,17 +1088,24 @@ struct OnboardingView: View {
         return .dangereux
     }
 
-    /// Données chiffrées pour l'affichage de l'analyse.
+    /// Données chiffrées pour l'affichage de l'analyse — tenant compte de l'approche choisie.
     private var analyseFaisabilite: (kgEstimes: Double, kcalParJour: Double, semainesMin: Int) {
         let indexActuel = SilhouetteObjectif(rawValue: silhouetteActuelle)?.index ?? 2
         let indexCible  = SilhouetteObjectif(rawValue: silhouetteObjectif)?.index ?? 2
-        let distance    = abs(indexActuel - indexCible)
-        let kgEstimes   = Double(distance) * 4.5
-        let semaines    = max(1, Calendar.current.dateComponents(
-            [.weekOfYear], from: Date(), to: dateObjectif
-        ).weekOfYear ?? 1)
-        let kcalParJour  = kgEstimes > 0 ? (kgEstimes * 7_700) / (Double(semaines) * 7.0) : 0
-        let semainesMin  = kgEstimes > 0 ? max(8, Int(ceil(kgEstimes / 0.27))) : 0
+        let kgEstimes   = Double(abs(indexActuel - indexCible)) * 4.5
+
+        // Utilise NutritionCalculator avec l'approche courante
+        let temp = UserProfile(prenom: "", sexe: sexe, taille: taille, niveauActivite: niveauActivite)
+        temp.poidsActuel            = max(poidsActuel, 1)
+        temp.silhouetteActuelle     = silhouetteActuelle
+        temp.silhouetteObjectif     = silhouetteObjectif
+        temp.dateObjectif           = dateObjectif
+        temp.approcheTransformation = approcheTransformation
+        let obj = NutritionCalculator.objectifsCaloriques(profil: temp)
+
+        let kcalParJour = kgEstimes > 0 ? abs(obj.ajustement) : 0
+        let perteSem    = max(0.1, obj.perteSemaineEstimee)
+        let semainesMin = kgEstimes > 0 ? max(8, Int(ceil(kgEstimes / perteSem))) : 0
         return (kgEstimes, kcalParJour, semainesMin)
     }
 

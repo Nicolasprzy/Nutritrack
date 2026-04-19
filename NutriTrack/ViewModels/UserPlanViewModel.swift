@@ -86,15 +86,32 @@ class UserPlanViewModel {
 
     // MARK: - Marquer séance comme faite
 
-    func marquerSeanceFaite(jourId: String, context: ModelContext) {
-        guard let plan = planActif,
-              var entrainement = plan.planEntrainement else { return }
+    /// Passe le plan explicitement pour éviter la dépendance à planActif (qui peut être nil).
+    /// Crée aussi une ActivityEntry pour alimenter l'historique.
+    func marquerSeanceFaite(plan: UserPlan, jourId: String, profileID: String, context: ModelContext) {
+        guard var entrainement = plan.planEntrainement else { return }
 
-        if let idx = entrainement.semaineType.firstIndex(where: { $0.id == jourId }) {
-            entrainement.semaineType[idx].seanceFaite = true
-            entrainement.semaineType[idx].dateFaite = ISO8601DateFormatter().string(from: Date())
-        }
+        guard let idx = entrainement.semaineType.firstIndex(where: { $0.id == jourId }) else { return }
+        let jour = entrainement.semaineType[idx]
+
+        // 1. Mettre à jour le flag dans le JSON du plan
+        entrainement.semaineType[idx].seanceFaite = true
+        entrainement.semaineType[idx].dateFaite = ISO8601DateFormatter().string(from: Date())
         plan.sauvegarderPlanEntrainement(entrainement)
+
+        // 2. Créer une ActivityEntry pour l'historique
+        let label = "\(jour.typeSeance) — \(jour.jourLabel)"
+        let kcal  = Double(jour.dureeMinutes) * 5.5  // ~5.5 kcal/min en moyenne
+        let entry = ActivityEntry(
+            date:            Date(),
+            activityType:    label,
+            durationMinutes: jour.dureeMinutes,
+            caloriesBurned:  kcal,
+            notes:           "Séance du programme IA"
+        )
+        entry.profileID = profileID
+        context.insert(entry)
+
         try? context.save()
     }
 

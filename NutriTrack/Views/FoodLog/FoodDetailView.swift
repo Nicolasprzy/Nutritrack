@@ -12,9 +12,18 @@ struct FoodDetailView: View {
     let dateSelectionnee: Date
     var onAjoute: (() -> Void)? = nil
 
+    init(foodItem: FoodItem, mealType: String, dateSelectionnee: Date, onAjoute: (() -> Void)? = nil) {
+        self.foodItem = foodItem
+        self.mealType = mealType
+        self.dateSelectionnee = dateSelectionnee
+        self.onAjoute = onAjoute
+        self._dateAjout = State(initialValue: dateSelectionnee)
+    }
+
     @State private var quantite: Double = 100.0
     @State private var uniteSelectionnee: String = "g"
     @State private var viewModel = FoodLogViewModel()
+    @State private var dateAjout: Date
 
     private let unites = ["g", "ml", "portion"]
 
@@ -73,15 +82,28 @@ struct FoodDetailView: View {
                         .font(.nutriBody)
                         .foregroundStyle(.secondary)
                 }
-                HStack {
+                HStack(spacing: Spacing.sm) {
+                    // Badge repas
                     Text(MealType(rawValue: mealType)?.label ?? mealType)
                         .font(.nutriCaption)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(.ultraThinMaterial, in: Capsule())
-                    Text(dateSelectionnee.formatMedium)
-                        .font(.nutriCaption)
-                        .foregroundStyle(.secondary)
+
+                    // Sélecteur de date — modifiable
+                    HStack(spacing: 4) {
+                        Image(systemName: "calendar")
+                            .font(.caption2)
+                            .foregroundStyle(Color.nutriGreen)
+                        DatePicker("", selection: $dateAjout, displayedComponents: .date)
+                            .labelsHidden()
+                            .datePickerStyle(.compact)
+                            .tint(Color.nutriGreen)
+                            .font(.nutriCaption)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.nutriGreen.opacity(0.08), in: Capsule())
                 }
             }
         }
@@ -218,6 +240,7 @@ struct FoodDetailView: View {
             foodItem: foodItem,
             quantite: quantite,
             mealType: mealType,
+            date: dateAjout,
             profileID: activeProfileID,
             context: modelContext
         )

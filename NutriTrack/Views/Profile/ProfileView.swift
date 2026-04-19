@@ -130,38 +130,134 @@ struct ProfileView: View {
 
     private var informationsSection: some View {
         profileSection(titre: "Informations personnelles", icone: "person.fill", couleur: .blue) {
-            profileRow("Prénom") {
-                TextField("Votre prénom", text: $prenom)
-                    .multilineTextAlignment(.trailing)
+
+            // ── Avatar + Prénom ───────────────────────────────────────────
+            HStack(spacing: Spacing.md) {
+                // Cercle initiales
+                ZStack {
+                    Circle()
+                        .fill(Color.blue.opacity(0.12))
+                        .frame(width: 54, height: 54)
+                    Circle()
+                        .strokeBorder(Color.blue.opacity(0.25), lineWidth: 1.5)
+                        .frame(width: 54, height: 54)
+                    Text(prenom.prefix(1).uppercased().isEmpty
+                         ? "?" : String(prenom.prefix(1).uppercased()))
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .foregroundStyle(.blue)
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Prénom")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+                    TextField("Votre prénom", text: $prenom)
+                        .font(.system(size: 17, weight: .semibold))
+                        .textFieldStyle(.plain)
+                }
             }
+            .padding(.vertical, Spacing.xs)
+
             Divider()
-            profileRow("Date de naissance") {
-                DatePicker("", selection: $dateNaissance, displayedComponents: .date)
-                    .labelsHidden()
+
+            // ── Date de naissance ─────────────────────────────────────────
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                HStack(spacing: 6) {
+                    Image(systemName: "birthday.cake.fill")
+                        .font(.caption)
+                        .foregroundStyle(.blue)
+                    Text("Date de naissance")
+                        .font(.nutriBody)
+                    Spacer()
+                    // Badge âge
+                    Text("\(dateNaissance.age) ans")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.blue)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Color.blue.opacity(0.1), in: Capsule())
+                }
+                // Sélecteur de date stylisé dans une capsule
+                HStack {
+                    DatePicker("", selection: $dateNaissance, displayedComponents: .date)
+                        .labelsHidden()
+                        .datePickerStyle(.compact)
+                        .tint(.blue)
+                    Spacer()
+                }
+                .padding(.horizontal, Spacing.sm)
+                .padding(.vertical, 8)
+                .background(Color.blue.opacity(0.05), in: RoundedRectangle(cornerRadius: Radius.sm))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Radius.sm)
+                        .strokeBorder(Color.blue.opacity(0.15), lineWidth: 1)
+                )
             }
+            .padding(.vertical, Spacing.xs)
+
             Divider()
-            profileRow("Sexe") {
+
+            // ── Sexe — segmented ─────────────────────────────────────────
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                HStack(spacing: 6) {
+                    Image(systemName: "person.2.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("Sexe").font(.nutriBody)
+                }
                 Picker("", selection: $sexe) {
                     ForEach(Sexe.allCases, id: \.self) { s in
                         Text(s.label).tag(s.rawValue)
                     }
                 }
+                .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(width: 120)
             }
+            .padding(.vertical, Spacing.xs)
+
             Divider()
-            profileRow("Taille") {
-                Stepper("\(taille.arrondi(0)) cm", value: $taille, in: 100...250, step: 0.5)
-            }
-            Divider()
-            profileRow("Objectif poids") {
-                HStack(spacing: 4) {
-                    TextField("75", value: $objectifPoids, format: .number.precision(.fractionLength(1)))
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 60)
-                    Text("kg").foregroundStyle(.secondary)
+
+            // ── Taille ────────────────────────────────────────────────────
+            HStack {
+                HStack(spacing: 6) {
+                    Image(systemName: "ruler.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("Taille").font(.nutriBody)
+                }
+                Spacer()
+                Stepper(value: $taille, in: 100...250, step: 0.5) {
+                    Text("\(taille.arrondi(0)) cm")
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .foregroundStyle(.primary)
                 }
             }
+            .padding(.vertical, 2)
+
+            Divider()
+
+            // ── Objectif poids ────────────────────────────────────────────
+            HStack {
+                HStack(spacing: 6) {
+                    Image(systemName: "scalemass.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("Objectif poids").font(.nutriBody)
+                }
+                Spacer()
+                HStack(spacing: 4) {
+                    TextField("75", value: $objectifPoids,
+                              format: .number.precision(.fractionLength(1)))
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 60)
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                    Text("kg")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.vertical, 2)
         }
     }
 
@@ -580,13 +676,15 @@ struct ProfileView: View {
     }
 
     private func profileRow<Content: View>(_ label: String, @ViewBuilder trailing: () -> Content) -> some View {
-        HStack {
+        HStack(alignment: .center) {
             Text(label)
                 .font(.nutriBody)
+                .foregroundStyle(.primary)
             Spacer()
             trailing()
+                .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
     }
 
     // MARK: - Actions

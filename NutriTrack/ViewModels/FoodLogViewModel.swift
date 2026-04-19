@@ -68,11 +68,12 @@ class FoodLogViewModel {
         foodItem: FoodItem,
         quantite: Double,
         mealType: String,
+        date: Date? = nil,
         profileID: String = "",
         context: ModelContext
     ) {
         let entry = FoodEntry(
-            date:     dateSelectionnee,
+            date:     date ?? dateSelectionnee,
             mealType: mealType,
             quantity: quantite,
             foodItem: foodItem
