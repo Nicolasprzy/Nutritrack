@@ -23,7 +23,16 @@ struct BodyTrackingView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: Spacing.lg) {
+                LuminaSectionHeader(
+                    eyebrow: "Acte III · Physiologie",
+                    title: "Corps",
+                    emphasis: "& Forme."
+                )
+                .padding(.horizontal, Spacing.md)
+                .padding(.top, Spacing.sm)
+
                 carteResume
+                GlassCard { WellnessScoreView() }
                 ongletSelector
                 switch ongletActif {
                 case .poids:        contenuPoids
@@ -35,8 +44,8 @@ struct BodyTrackingView: View {
             }
             .padding(Spacing.md)
         }
-        .navigationTitle("Corps & Forme")
-        .background(Color.fondPrincipal)
+        .navigationTitle("")
+        .background(Color.fondPrincipal.opacity(0.70))
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: { viewModel.showAddMetric = true }) {
@@ -45,10 +54,11 @@ struct BodyTrackingView: View {
                 .accessibilityLabel("Ajouter une mesure")
             }
         }
-        .sheet(isPresented: $viewModel.showAddMetric, onDismiss: {
-            viewModel.charger(context: modelContext, profileID: activeProfileID)
-        }) {
+        .nutriSheet(title: "Nouvelle mesure", size: .standard, isPresented: $viewModel.showAddMetric) {
             AddMetricView()
+        }
+        .onChange(of: viewModel.showAddMetric) { _, nouveau in
+            if !nouveau { viewModel.charger(context: modelContext, profileID: activeProfileID) }
         }
         .onAppear {
             viewModel.charger(context: modelContext, profileID: activeProfileID)
@@ -74,7 +84,7 @@ struct BodyTrackingView: View {
                     couleur: imcCouleur
                 )
                 Divider().frame(height: 50)
-                VStack(spacing: 4) {
+                VStack(spacing: Spacing.xs) {
                     Text(viewModel.evolutionPoidsFormatee)
                         .font(.nutriTitle2).foregroundStyle(evolutionCouleur)
                     Text("vs début")
@@ -99,7 +109,7 @@ struct BodyTrackingView: View {
     }
 
     private func resumeItem(valeur: String, label: String, icone: String, couleur: Color) -> some View {
-        VStack(spacing: 4) {
+        VStack(spacing: Spacing.xs) {
             Image(systemName: icone).foregroundStyle(couleur)
             Text(valeur).font(.nutriTitle2)
             Text(label).font(.nutriCaption).foregroundStyle(.secondary)
@@ -110,12 +120,12 @@ struct BodyTrackingView: View {
     // MARK: - Sélecteur d'onglet
 
     private var ongletSelector: some View {
-        Picker("Onglet", selection: $ongletActif) {
-            ForEach(OngletCorps.allCases, id: \.self) { o in
-                Text(o.rawValue).tag(o)
-            }
-        }
-        .pickerStyle(.segmented)
+        NutriPicker(
+            "",
+            selection: $ongletActif,
+            options: OngletCorps.allCases.map { NutriPickerOption($0, label: $0.rawValue) },
+            forceStyle: .segmented
+        )
     }
 
     // MARK: - Onglet Poids
@@ -124,12 +134,14 @@ struct BodyTrackingView: View {
         VStack(spacing: Spacing.md) {
             ChartCard(titre: "Évolution du poids", icone: "chart.line.uptrend.xyaxis", couleur: .blue) {
                 VStack(spacing: Spacing.sm) {
-                    Picker("Période", selection: $viewModel.periode) {
-                        ForEach(BodyTrackingViewModel.Periode.allCases, id: \.self) { p in
-                            Text(p.rawValue).tag(p)
-                        }
-                    }
-                    .pickerStyle(.segmented)
+                    NutriPicker(
+                        "",
+                        selection: $viewModel.periode,
+                        options: BodyTrackingViewModel.Periode.allCases.map {
+                            NutriPickerOption($0, label: $0.rawValue)
+                        },
+                        forceStyle: .segmented
+                    )
                     .onChange(of: viewModel.periode) { _, _ in
                         viewModel.charger(context: modelContext, profileID: activeProfileID)
                     }
@@ -176,7 +188,7 @@ struct BodyTrackingView: View {
             GlassCard {
                 VStack(spacing: Spacing.sm) {
                     Image(systemName: "person.crop.circle.badge.questionmark")
-                        .font(.system(size: 40)).foregroundStyle(.secondary)
+                        .font(.system(size: 40)).foregroundStyle(.secondary) // icône hero
                     Text("Profil non chargé")
                         .font(.nutriBody)
                     Text("Créez un profil pour accéder à l'analyse morphologique.")
@@ -201,7 +213,7 @@ struct BodyTrackingView: View {
                 GlassCard {
                     VStack(spacing: Spacing.sm) {
                         Image(systemName: "figure.arms.open")
-                            .font(.system(size: 40)).foregroundStyle(.secondary)
+                            .font(.system(size: 40)).foregroundStyle(.secondary) // icône hero
                         Text("Aucun objectif de silhouette défini")
                             .font(.nutriBody)
                         Text("Définissez votre objectif dans le Profil.")
@@ -222,7 +234,7 @@ struct BodyTrackingView: View {
 
                 HStack(spacing: 0) {
                     // Silhouette de départ (approximée par la silhouette "normale")
-                    VStack(spacing: 6) {
+                    VStack(spacing: Spacing.sm) {
                         SilhouetteView(
                             objectif: .normal,
                             sexe: profil.sexeEnum,
@@ -233,17 +245,17 @@ struct BodyTrackingView: View {
                     }
                     .frame(maxWidth: .infinity)
 
-                    VStack(spacing: 4) {
+                    VStack(spacing: Spacing.xs) {
                         Image(systemName: "arrow.right").foregroundStyle(Color.nutriGreen)
                         if let dateObj = Optional(profil.dateObjectif), dateObj > Date() {
                             let jours = Calendar.current.dateComponents([.day], from: Date(), to: dateObj).day ?? 0
                             Text("\(jours)j restants")
-                                .font(.system(size: 9)).foregroundStyle(.secondary)
+                                .font(.nutriCaption2).foregroundStyle(.secondary)
                         }
                     }
                     .frame(maxWidth: .infinity)
 
-                    VStack(spacing: 6) {
+                    VStack(spacing: Spacing.sm) {
                         SilhouetteView(
                             objectif: cible,
                             sexe: profil.sexeEnum,
@@ -261,7 +273,7 @@ struct BodyTrackingView: View {
                 let joursEcoules = Calendar.current.dateComponents([.day], from: profil.createdAt, to: Date()).day ?? 0
                 let progression = min(1.0, Double(joursEcoules) / Double(totalJours))
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: Spacing.xs) {
                     HStack {
                         Text("Progression temporelle")
                             .font(.nutriCaption).foregroundStyle(.secondary)
@@ -310,7 +322,7 @@ struct BodyTrackingView: View {
                         Text("Aucune mensuration enregistrée")
                             .font(.nutriCaption).foregroundStyle(.secondary)
                         Text("Ajoutez une mesure avec le bouton + pour suivre votre progression.")
-                            .font(.system(size: 10)).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                            .font(.nutriCaption2).foregroundStyle(.secondary).multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity).padding(.vertical, Spacing.sm)
                 }
@@ -331,15 +343,15 @@ struct BodyTrackingView: View {
                                     Text("—").font(.nutriCaption).foregroundStyle(.secondary)
                                 }
                                 Image(systemName: "arrow.right")
-                                    .font(.system(size: 10)).foregroundStyle(.secondary)
+                                    .font(.nutriCaption2).foregroundStyle(.secondary)
                                 if item.actuelle > 0 {
                                     let diff = item.actuelle - item.initial
-                                    HStack(spacing: 3) {
+                                    HStack(spacing: Spacing.xxs) {
                                         Text("\(item.actuelle.arrondi(1)) cm")
                                             .font(.nutriCaption).foregroundStyle(item.couleur)
                                         if item.initial > 0 && abs(diff) > 0.1 {
                                             Text(diff > 0 ? "+\(diff.arrondi(1))" : diff.arrondi(1))
-                                                .font(.system(size: 9))
+                                                .font(.nutriCaption2)
                                                 .foregroundStyle(diff < 0 ? Color.nutriGreen : .orange)
                                         }
                                     }
@@ -347,7 +359,7 @@ struct BodyTrackingView: View {
                                     Text("—").font(.nutriCaption).foregroundStyle(.secondary)
                                 }
                             }
-                            .padding(.vertical, 2)
+                            .padding(.vertical, Spacing.xxs)
                             if item.label != initiales.last?.label { Divider() }
                         }
                     }
@@ -373,7 +385,7 @@ struct BodyTrackingView: View {
 
                             VStack(alignment: .leading, spacing: 1) {
                                 if metric.weight > 0 {
-                                    HStack(spacing: 4) {
+                                    HStack(spacing: Spacing.xs) {
                                         Text(metric.weight.kg).font(.nutriBody)
                                         if metric.bmi > 0 {
                                             Text("IMC \(metric.bmi.arrondi(1))")
@@ -390,7 +402,7 @@ struct BodyTrackingView: View {
                                         metric.thigh > 0    ? "C:\(metric.thigh.arrondi(0))" : nil,
                                     ].compactMap { $0 }
                                     Text(parts.joined(separator: "  "))
-                                        .font(.system(size: 10)).foregroundStyle(.secondary)
+                                        .font(.nutriCaption2).foregroundStyle(.secondary)
                                 }
                             }
 
@@ -458,7 +470,7 @@ struct MiniChartView: View {
 
     var body: some View {
         GlassCard(padding: Spacing.sm) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Spacing.xs) {
                 Text(titre)
                     .font(.nutriCaption).foregroundStyle(.secondary)
 
@@ -468,7 +480,7 @@ struct MiniChartView: View {
                         .frame(maxWidth: .infinity, minHeight: 60, alignment: .center)
                 } else {
                     HStack(alignment: .bottom) {
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: Spacing.xxs) {
                             Text("\(donnees.last!.valeur.arrondi(1))\(unite)")
                                 .font(.nutriTitle2).foregroundStyle(couleur)
                             if donnees.count >= 2 {

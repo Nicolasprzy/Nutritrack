@@ -64,12 +64,15 @@ class UserProfile {
 
     // MARK: - Intégrations
     var healthKitActif: Bool = false
-    var claudeAPIKey: String = ""
 
-    // MARK: - Cache Coach IA
-    var conseilIADuJour: String = ""
-    var conseilIADate: Date = Date.distantPast
-    var aiHistoriqueJSON: String = ""
+    // MARK: - Objectifs physiques (Sprint 1)
+    // CloudKit : optionnels OK, pas de default requis
+    var targetWeightKg: Double?
+    var targetBodyFatPct: Double?
+    var targetDate: Date?
+
+    // Flag de seeding du plan nutrition (CloudKit : default value)
+    var planSeeded: Bool = false
 
     var createdAt: Date = Date()
 
@@ -142,27 +145,7 @@ class UserProfile {
         prenom.isEmpty ? "toi" : prenom
     }
 
-    var aUneCleAPI: Bool {
-        !claudeAPIKey.trimmingCharacters(in: .whitespaces).isEmpty
-    }
-
     var aUnObjectifSilhouette: Bool {
         !silhouetteObjectif.isEmpty
-    }
-
-    // MARK: - État du plan IA
-
-    enum EtatPlan {
-        case profilIncomplet    // silhouette objectif absent ou date dépassée
-        case cleAPIManquante    // profil complet mais pas de clé Claude
-        case aucunPlan          // clé API présente mais aucun plan généré
-        case planActif(UserPlan)
-    }
-
-    func etatPlan(planActif: UserPlan?) -> EtatPlan {
-        guard aUnObjectifSilhouette, dateObjectif > Date() else { return .profilIncomplet }
-        guard aUneCleAPI else { return .cleAPIManquante }
-        guard let plan = planActif else { return .aucunPlan }
-        return .planActif(plan)
     }
 }

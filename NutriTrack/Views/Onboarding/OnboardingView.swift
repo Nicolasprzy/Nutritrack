@@ -72,7 +72,6 @@ struct OnboardingView: View {
     @State private var alcool: String = "jamais"
     @State private var tabac: Bool = false
     @State private var hydratation: Double = 1.5
-    @State private var claudeAPIKey: String = ""
 
     // Étape 6 — Objectif + faisabilité
     @State private var dateObjectif: Date = Calendar.current.date(byAdding: .month, value: 6, to: Date()) ?? Date()
@@ -157,7 +156,7 @@ struct OnboardingView: View {
 
             bottomNavigation
         }
-        .frame(maxWidth: 520)
+        .frame(maxWidth: NutriLayout.sheetCompactWidth)
     }
 
     // MARK: - Top bar
@@ -169,7 +168,7 @@ struct OnboardingView: View {
                     Image(systemName: "leaf.fill")
                         .foregroundStyle(Color.nutriGreen)
                     Text("NutriTrack")
-                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .font(.nutriHeadline)
                 }
                 Spacer()
                 Text("\(etape + 1) / \(totalEtapes)")
@@ -209,11 +208,11 @@ struct OnboardingView: View {
             Group {
                 if isDone {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 10, weight: .bold))
+                        .font(.nutriCaption2.bold())
                         .foregroundStyle(.white)
                 } else {
                     Text("\(index + 1)")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.nutriCaption2)
                         .foregroundStyle(isCurrent ? .white : Color.secondary)
                 }
             }
@@ -235,11 +234,11 @@ struct OnboardingView: View {
                     .frame(width: 78, height: 78)
                     .shadow(color: couleurEtape.opacity(0.36), radius: 16, x: 0, y: 8)
                 Image(systemName: iconeEtape)
-                    .font(.system(size: 30, weight: .medium))
+                    .font(.system(size: 30, weight: .medium)) // icône hero
                     .foregroundStyle(.white)
             }
             Text(titreEtape)
-                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .font(.nutriTitle2)
                 .multilineTextAlignment(.center)
         }
         .padding(.top, Spacing.md)
@@ -252,7 +251,7 @@ struct OnboardingView: View {
             if etape > 0 {
                 Button(action: { withAnimation(.spring(response: 0.35)) { etape -= 1 } }) {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.nutriHeadline)
                         .frame(width: 50, height: 50)
                         .background(.ultraThinMaterial, in: Circle())
                         .overlay(Circle().stroke(Color.secondary.opacity(0.18), lineWidth: 1))
@@ -267,10 +266,10 @@ struct OnboardingView: View {
             Button(action: avancer) {
                 HStack(spacing: 8) {
                     Text(labelBoutonSuivant)
-                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .font(.nutriHeadline)
                     if etape < totalEtapes - 1 {
                         Image(systemName: "arrow.right")
-                            .font(.system(size: 13, weight: .bold))
+                            .font(.nutriCaption.bold())
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -332,11 +331,11 @@ struct OnboardingView: View {
 
                 if initiales.isEmpty {
                     Image(systemName: "person.fill")
-                        .font(.system(size: 38))
+                        .font(.system(size: 38)) // icône hero — conservée
                         .foregroundStyle(.white.opacity(0.6))
                 } else {
                     Text(initiales)
-                        .font(.system(size: 34, weight: .bold, design: .rounded))
+                        .font(.nutriLargeTitle)
                         .foregroundStyle(.white)
                 }
             }
@@ -424,9 +423,9 @@ struct OnboardingView: View {
         return Button(action: { withAnimation(.spring(response: 0.25)) { sexe = s.rawValue } }) {
             HStack(spacing: 8) {
                 Image(systemName: s.rawValue == "homme" ? "figure.stand" : "figure.stand.dress")
-                    .font(.system(size: 18))
+                    .font(.nutriTitle3)
                 Text(s.label)
-                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .font(.nutriBody)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 11)
@@ -705,7 +704,7 @@ struct OnboardingView: View {
         return Button(action: { equipementSport = eq.rawValue }) {
             HStack(spacing: 6) {
                 Image(systemName: eq.icon).font(.caption)
-                Text(eq.label).font(.system(size: 11, design: .rounded))
+                Text(eq.label).font(.nutriCaption2)
                     .lineLimit(1).minimumScaleFactor(0.8)
             }
             .frame(maxWidth: .infinity)
@@ -733,7 +732,7 @@ struct OnboardingView: View {
                                 Button(action: { regimeAlimentaire = r.rawValue }) {
                                     HStack(spacing: 6) {
                                         Image(systemName: r.icon).font(.caption)
-                                        Text(r.label).font(.system(size: 12, design: .rounded))
+                                        Text(r.label).font(.nutriCaption)
                                     }
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 8)
@@ -825,22 +824,6 @@ struct OnboardingView: View {
                 }
             }
 
-            GlassCard {
-                VStack(alignment: .leading, spacing: Spacing.sm) {
-                    Label("Coach IA (optionnel)", systemImage: "brain.head.profile")
-                        .font(.nutriTitle2).foregroundStyle(.cyan)
-                    Text("Ajoutez votre clé Claude pour générer votre plan personnalisé immédiatement.")
-                        .font(.nutriCaption).foregroundStyle(.secondary)
-                    SecureField("Clé API Claude (sk-ant-…)", text: $claudeAPIKey)
-                        .font(.system(.body, design: .monospaced))
-                        .padding(Spacing.sm)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Radius.md))
-                    if !claudeAPIKey.isEmpty {
-                        Label("Clé configurée", systemImage: "checkmark.circle.fill")
-                            .font(.nutriCaption).foregroundStyle(Color.nutriGreen)
-                    }
-                }
-            }
         }
     }
 
@@ -894,17 +877,21 @@ struct OnboardingView: View {
 
     private var approcheTransformationCard: some View {
         GlassCard {
-            ApprochePreviewCard(
-                poids:                  poidsActuel,
-                taille:                 taille,
-                age:                    dateNaissance.age,
-                sexe:                   sexe,
-                niveauActivite:         niveauActivite,
-                silhouetteActuelle:     silhouetteActuelle,
-                silhouetteObjectif:     silhouetteObjectif,
-                dateObjectif:           dateObjectif,
-                approcheTransformation: $approcheTransformation
-            )
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                Label("Approche de transformation", systemImage: "figure.mixed.cardio")
+                    .font(.nutriHeadline)
+                Picker("Approche", selection: $approcheTransformation) {
+                    ForEach(ApprocheTransformation.allCases, id: \.self) { a in
+                        Text("\(a.emoji) \(a.label)").tag(a.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+                if let a = ApprocheTransformation(rawValue: approcheTransformation) {
+                    Text(a.descriptionCourte)
+                        .font(.nutriCaption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 
@@ -915,9 +902,9 @@ struct OnboardingView: View {
                     .font(.callout)
                     .foregroundStyle(color)
                 Text(value)
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .font(.nutriHeadline)
                 Text(label)
-                    .font(.caption2)
+                    .font(.nutriCaption2)
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity)
@@ -1007,7 +994,7 @@ struct OnboardingView: View {
 
     private var labelBoutonSuivant: String {
         if etape == totalEtapes - 1 {
-            return claudeAPIKey.isEmpty ? "Commencer !" : "Créer mon plan IA"
+            return "Commencer !"
         }
         if etape == 1 { return "Passer" }
         return "Suivant"
@@ -1170,7 +1157,6 @@ struct OnboardingView: View {
         profil.tabac                      = tabac
         profil.hydratationHabituelleLitres = hydratation
 
-        profil.claudeAPIKey           = claudeAPIKey
         profil.approcheTransformation = approcheTransformation
         profil.onboardingV2Complete   = true
 
@@ -1243,7 +1229,7 @@ struct FlowTags: View {
                         .font(.nutriCaption)
                         .padding(.horizontal, Spacing.sm)
                         .padding(.vertical, 5)
-                        .background(selected ? color.opacity(0.2) : Color.clear, in: Capsule())
+                        .background { Capsule().fill(selected ? color.opacity(0.2) : Color.clear) }
                         .overlay(Capsule().stroke(selected ? color : Color.secondary.opacity(0.3)))
                         .foregroundStyle(selected ? color : .secondary)
                 }

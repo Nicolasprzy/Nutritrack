@@ -11,14 +11,20 @@ class DashboardViewModel {
     var caloriesBruleesActivites: Double = 0    // activités manuelles
     var totalCaloriesBrulees: Double { caloriesBruleesAujourdhui + caloriesBruleesActivites }
     var pasAujourdhui: Double = 0
-    var conseilIA: String = ""
-    var isLoadingConseil = false
     var isLoadingHealthKit = false
 
     // Dernières métriques corporelles
     var dernierPoids: Double = 0
     var dernierIMC: Double = 0
     var derniereMasseGrasse: Double = 0
+
+    // MARK: - Plan nutrition (Sprint 2)
+
+    var currentDayContext: DayContext?
+    var currentTarget: MacroTarget?
+    var consumedKcal: Int = 0
+    var consumedProteinG: Int = 0
+    var suggestedTemplates: [MealTemplate] = []
 
     // MARK: - Chargement du bilan du jour
 
@@ -110,99 +116,172 @@ class DashboardViewModel {
         pasAujourdhui = await pas
     }
 
-    // MARK: - Conseil IA du jour (cache 1 appel/jour)
+    // MARK: - Plan nutrition (Sprint 2)
 
-    func chargerConseilIA(service: ClaudeAIService, profil: UserProfile, context: ModelContext) async {
-        guard profil.aUneCleAPI else { return }
-
-        // Afficher le cache existant immédiatement
-        if !profil.conseilIADuJour.isEmpty {
-            conseilIA = profil.conseilIADuJour
+    /// Appelée à l'ouverture du Dashboard pour charger/créer le DayContext du jour.
+    @MainActor
+    func chargerPlanNutrition(context: ModelContext, profileID: String) {
+        guard !profileID.isEmpty else {
+            currentDayContext = nil
+            currentTarget = nil
+            suggestedTemplates = []
+            consumedKcal = 0
+            consumedProteinG = 0
+            return
         }
 
-        // Ne pas rappeler l'API si le conseil du jour est déjà frais
-        let dejaFrais = Calendar.current.isDateInToday(profil.conseilIADate)
-        guard !dejaFrais else { return }
+        let today = Calendar.current.startOfDay(for: Date())
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today) ?? today
+        let pid = profileID
 
-        isLoadingConseil = true
-        defer { isLoadingConseil = false }
-
-        let contexte = construireContexte(profil: profil, context: context)
-        let conseil = await service.conseilDuJour(contexte: contexte, apiKey: profil.claudeAPIKey)
-
-        if let texte = conseil {
-            conseilIA = texte
-            // Sauvegarder en cache dans UserProfile
-            profil.conseilIADuJour = texte
-            profil.conseilIADate = Date()
-            try? context.save()
+        // Fetch DayContext existant pour aujourd'hui
+        let descriptor = FetchDescriptor<DayContext>(
+            predicate: #Predicate<DayContext> {
+                $0.profileID == pid && $0.date >= today && $0.date < tomorrow
+            }
+        )
+        if let existing = try? context.fetch(descriptor).first {
+            currentDayContext = existing
+        } else {
+            currentDayContext = nil
         }
-    }
 
-    func rafraichirConseilIA(service: ClaudeAIService, profil: UserProfile, context: ModelContext) async {
-        guard profil.aUneCleAPI else { return }
-        isLoadingConseil = true
-        defer { isLoadingConseil = false }
-
-        let contexte = construireContexte(profil: profil, context: context)
-        let conseil = await service.conseilDuJour(contexte: contexte, apiKey: profil.claudeAPIKey)
-
-        if let texte = conseil {
-            conseilIA = texte
-            profil.conseilIADuJour = texte
-            profil.conseilIADate = Date()
-            try? context.save()
-        }
-    }
-
-    private func construireContexte(profil: UserProfile, context: ModelContext) -> ContexteNutritionnel {
-        let pid = profil.profileID.uuidString
-        var resumeJours: [String] = []
-        for i in 0..<7 {
-            guard let jour = Calendar.current.date(byAdding: .day, value: -i, to: Date()) else { continue }
-            let debut = jour.debutDeJour
-            let fin   = jour.finDeJour
-            let descriptor = FetchDescriptor<FoodEntry>(
-                predicate: #Predicate<FoodEntry> {
-                    $0.date >= debut && $0.date <= fin && $0.profileID == pid
+        // Fetch target si DayContext existe
+        if let ctx = currentDayContext {
+            let dayTypeRaw = ctx.dayType
+            let targetDescriptor = FetchDescriptor<MacroTarget>(
+                predicate: #Predicate<MacroTarget> {
+                    $0.profileID == pid && $0.dayType == dayTypeRaw
                 }
             )
-            let entries = (try? context.fetch(descriptor)) ?? []
-            let cal  = entries.reduce(0) { $0 + $1.calories }
-            let prot = entries.reduce(0) { $0 + $1.proteins }
-            resumeJours.append("\(jour.formatCourt) : \(cal.arrondi(0)) kcal / Prot: \(prot.arrondi(0))g")
-        }
-
-        let metricsDesc = FetchDescriptor<BodyMetric>(
-            predicate: #Predicate<BodyMetric> { $0.profileID == pid },
-            sortBy: [SortDescriptor(\.date, order: .reverse)]
-        )
-        let metrics = (try? context.fetch(metricsDesc)) ?? []
-        let dernierPoids = metrics.first?.weight ?? 0
-        let tendance: String
-        if metrics.count >= 2 {
-            let diff = metrics[0].weight - metrics.min(by: { abs($0.date.timeIntervalSinceNow) > abs($1.date.timeIntervalSinceNow) })!.weight
-            tendance = diff > 0 ? "+\(diff.arrondi(1)) kg" : "\(diff.arrondi(1)) kg"
+            currentTarget = try? context.fetch(targetDescriptor).first
         } else {
-            tendance = "Données insuffisantes"
+            currentTarget = nil
         }
 
-        let objTransfo = NutritionCalculator.objectifsCaloriques(profil: profil)
-        let macTransfo = NutritionCalculator.macrosCiblesTransformation(
-            calories:   objTransfo.objectifTransformation,
-            poidsKg:    profil.poidsActuel,
-            ajustement: objTransfo.ajustement,
-            approche:   profil.approcheEnum
+        // Suggested templates selon l'heure
+        let mealType = suggestedMealType(at: Date())
+        let mealTypeRaw = mealType.rawValue
+        let templateDescriptor = FetchDescriptor<MealTemplate>(
+            predicate: #Predicate<MealTemplate> {
+                $0.profileID == pid && $0.isActive == true && $0.mealType == mealTypeRaw
+            },
+            sortBy: [SortDescriptor(\.createdAt)]
         )
-        return ContexteNutritionnel(
-            prenom:             profil.prenom,
-            objectifCalorique:  objTransfo.objectifTransformation,
-            objectifProteines:  macTransfo.proteines,
-            objectifGlucides:   macTransfo.glucides,
-            objectifLipides:    macTransfo.lipides,
-            resumeSemaine:      resumeJours.joined(separator: "\n"),
-            tendancePoids:      tendance,
-            dernierPoids:       dernierPoids
+        suggestedTemplates = (try? context.fetch(templateDescriptor)) ?? []
+
+        // Recalculer consommation du jour
+        recalculerConsommation(context: context, profileID: profileID)
+    }
+
+    /// Sélectionne (ou crée) le DayType pour aujourd'hui. Unicité par (profileID, date).
+    @MainActor
+    func selectDayType(_ type: DayType, context: ModelContext, profileID: String) {
+        guard !profileID.isEmpty else { return }
+
+        let today = Calendar.current.startOfDay(for: Date())
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today) ?? today
+        let pid = profileID
+        let descriptor = FetchDescriptor<DayContext>(
+            predicate: #Predicate<DayContext> {
+                $0.profileID == pid && $0.date >= today && $0.date < tomorrow
+            }
         )
+        if let existing = try? context.fetch(descriptor).first {
+            existing.dayType = type.rawValue
+            currentDayContext = existing
+        } else {
+            let newCtx = DayContext(
+                profileID: profileID,
+                date: Date(),
+                dayType: type
+            )
+            context.insert(newCtx)
+            currentDayContext = newCtx
+        }
+
+        try? context.save()
+
+        // Recharger target
+        let dayTypeRaw = type.rawValue
+        let targetDescriptor = FetchDescriptor<MacroTarget>(
+            predicate: #Predicate<MacroTarget> {
+                $0.profileID == pid && $0.dayType == dayTypeRaw
+            }
+        )
+        currentTarget = try? context.fetch(targetDescriptor).first
+    }
+
+    /// Logue un template en créant N FoodEntry (copie des valeurs pour survivre à une modification du template).
+    @MainActor
+    func logTemplate(_ template: MealTemplate, context: ModelContext, profileID: String) {
+        guard !profileID.isEmpty else { return }
+
+        let mealTypeFR = convertToFrMealType(template.mealType)
+        let now = Date()
+
+        for item in (template.items ?? []).sorted(by: { $0.orderIndex < $1.orderIndex }) {
+            // On crée le FoodEntry sans FoodItem (copie des valeurs calculées directement)
+            let entry = FoodEntry(
+                date: now,
+                mealType: mealTypeFR,
+                quantity: item.quantityG,
+                foodItem: nil
+            )
+            entry.profileID = profileID
+            // Copie directe des macros (pas de FoodItem → on bypass calculerMacros)
+            entry.calories      = Double(item.kcal)
+            entry.proteins      = item.proteinG
+            entry.carbohydrates = item.carbsG
+            entry.fats          = item.fatG
+            context.insert(entry)
+        }
+
+        try? context.save()
+        recalculerConsommation(context: context, profileID: profileID)
+    }
+
+    /// Heuristique "quel type de repas selon l'heure courante".
+    func suggestedMealType(at date: Date) -> TemplateMealType {
+        let h = Calendar.current.component(.hour, from: date)
+        switch h {
+        case 5...10: return .breakfast
+        case 11...14: return .lunch
+        case 15...17: return .snack
+        case 18...22: return .dinner
+        default: return .breakfast
+        }
+    }
+
+    /// Convertit la rawValue de TemplateMealType en string attendue par FoodEntry.mealType
+    /// (raws de l'enum MealType français : petit_dejeuner, dejeuner, diner, collation)
+    private func convertToFrMealType(_ rawTemplate: String) -> String {
+        switch rawTemplate {
+        case "breakfast": return "petit_dejeuner"
+        case "lunch":     return "dejeuner"
+        case "dinner":    return "diner"
+        case "snack":     return "collation"
+        default:          return "dejeuner"
+        }
+    }
+
+    @MainActor
+    private func recalculerConsommation(context: ModelContext, profileID: String) {
+        guard !profileID.isEmpty else {
+            consumedKcal = 0
+            consumedProteinG = 0
+            return
+        }
+        let pid = profileID
+        let startOfDay = Calendar.current.startOfDay(for: Date())
+        let endOfDay = Date().finDeJour
+        let descriptor = FetchDescriptor<FoodEntry>(
+            predicate: #Predicate<FoodEntry> {
+                $0.profileID == pid && $0.date >= startOfDay && $0.date <= endOfDay
+            }
+        )
+        let entries = (try? context.fetch(descriptor)) ?? []
+        consumedKcal = Int(entries.reduce(0.0) { $0 + $1.calories })
+        consumedProteinG = Int(entries.reduce(0.0) { $0 + $1.proteins })
     }
 }

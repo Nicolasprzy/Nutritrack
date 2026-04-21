@@ -161,9 +161,9 @@ struct BarcodeScannerView: View {
     @State private var codeSaisi: String = ""
 
     var body: some View {
-        VStack(spacing: Spacing.lg) {
+        VStack(alignment: .center, spacing: Spacing.lg) {
             Image(systemName: "barcode.viewfinder")
-                .font(.system(size: 64))
+                .font(.system(size: 64)) // icône hero
                 .foregroundStyle(.secondary)
 
             Text("Scanner de code-barres")
@@ -174,27 +174,26 @@ struct BarcodeScannerView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
-            TextField("Code-barres (ex: 3017620425035)", text: $codeSaisi)
-                .textFieldStyle(.roundedBorder)
+            NutriField("Code-barres",
+                       text: $codeSaisi,
+                       variant: .number,
+                       placeholder: "ex: 3017620425035")
                 .frame(maxWidth: 320)
 
-            HStack {
-                Button("Annuler") { isPresented = false }
-                    .buttonStyle(.bordered)
-
-                Button("Rechercher") {
+            HStack(spacing: Spacing.sm) {
+                NutriButton("Annuler", style: .secondary) { isPresented = false }
+                NutriButton("Rechercher",
+                            icon: "magnifyingglass",
+                            style: .primary,
+                            isDisabled: codeSaisi.trimmingCharacters(in: .whitespaces).isEmpty) {
                     if !codeSaisi.trimmingCharacters(in: .whitespaces).isEmpty {
                         onScan(codeSaisi)
                         isPresented = false
                     }
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.nutriGreen)
-                .disabled(codeSaisi.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
-        .padding(Spacing.xl)
-        .frame(width: 400, height: 350)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

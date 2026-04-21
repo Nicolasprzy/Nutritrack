@@ -9,17 +9,15 @@ struct AddMetricView: View {
 
     @State private var viewModel = BodyTrackingViewModel()
     @State private var poids: Double = 75.0
-    @State private var tourTaille: Double = 0
-    @State private var tourHanches: Double = 0
-    @State private var poitrine: Double = 0
-    @State private var bras: Double = 0
-    @State private var cuisse: Double = 0
-    @State private var masseGrasse: Double = 0
+    @State private var poidsTexte: String = "75.0"
+    @State private var tourTaille: String = ""
+    @State private var tourHanches: String = ""
+    @State private var poitrine: String = ""
+    @State private var bras: String = ""
+    @State private var cuisse: String = ""
+    @State private var masseGrasse: String = ""
     @State private var notes: String = ""
     @State private var healthKitService = HealthKitService()
-
-    // Permet de vider le focus (commit la valeur active du TextField) avant de sauvegarder
-    @FocusState private var champActif: Bool
 
     var profil: UserProfile? { profiles.first(where: { $0.profileID.uuidString == activeProfileID }) }
 
@@ -47,128 +45,73 @@ struct AddMetricView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // ── Titre ────────────────────────────────────────────────────
-            HStack {
-                Text("Nouvelle mesure")
-                    .font(.nutriTitle2)
-                    .padding(.leading, Spacing.lg)
-                Spacer()
-                Button("Annuler") { dismiss() }
-                    .padding(.trailing, Spacing.lg)
-            }
-            .padding(.vertical, Spacing.md)
-            .background(.ultraThinMaterial)
+        VStack(alignment: .leading, spacing: Spacing.lg) {
 
-            Divider()
+            // ── Poids + IMC ──────────────────────────────────────────────
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                NutriSectionHeader("Poids", icon: "scalemass.fill")
 
-            ScrollView {
-                VStack(spacing: Spacing.md) {
-
-                    // ── Poids + IMC ──────────────────────────────────────
-                    GlassCard {
-                        VStack(alignment: .leading, spacing: Spacing.sm) {
-                            Label("Poids", systemImage: "scalemass.fill")
-                                .font(.nutriHeadline).foregroundStyle(.blue)
-                            Divider()
-                            HStack {
-                                Text("Poids actuel")
-                                Spacer()
-                                TextField("75.0", value: $poids,
-                                          format: .number.precision(.fractionLength(1)))
-                                    .multilineTextAlignment(.trailing)
-                                    .frame(width: 70)
-                                    .focused($champActif)
-                                Text("kg").foregroundStyle(.secondary)
-                            }
-                            Slider(value: $poids, in: 30...200, step: 0.5).tint(.blue)
-                            if imc > 0 {
-                                Divider()
-                                HStack {
-                                    Text("IMC calculé")
-                                    Spacer()
-                                    Text(imc.arrondi(1))
-                                        .font(.nutriHeadline).foregroundStyle(imcCouleur)
-                                    Text("— \(imcCategorie)")
-                                        .font(.nutriCaption).foregroundStyle(imcCouleur)
-                                }
-                            }
+                NutriField("Poids actuel",
+                           text: $poidsTexte,
+                           variant: .decimal,
+                           placeholder: "75.0",
+                           suffix: "kg")
+                    .onChange(of: poidsTexte) { _, nouveau in
+                        if let v = Double(nouveau.replacingOccurrences(of: ",", with: ".")) {
+                            poids = v
                         }
                     }
 
-                    // ── Mensurations ─────────────────────────────────────
-                    GlassCard {
-                        VStack(alignment: .leading, spacing: Spacing.sm) {
-                            Label("Mensurations", systemImage: "ruler.fill")
-                                .font(.nutriHeadline).foregroundStyle(.purple)
-                            Divider()
-                            mensurationLigne("Tour de taille",  value: $tourTaille,  unite: "cm")
-                            Divider()
-                            mensurationLigne("Tour de hanches", value: $tourHanches, unite: "cm")
-                            Divider()
-                            mensurationLigne("Poitrine",        value: $poitrine,    unite: "cm")
-                            Divider()
-                            mensurationLigne("Bras droit",      value: $bras,        unite: "cm")
-                            Divider()
-                            mensurationLigne("Cuisse",          value: $cuisse,      unite: "cm")
-                            Divider()
-                            mensurationLigne("Masse grasse",    value: $masseGrasse, unite: "%")
-                        }
+                Slider(value: $poids, in: 30...200, step: 0.5)
+                    .tint(.blue)
+                    .onChange(of: poids) { _, nouveau in
+                        poidsTexte = String(format: "%.1f", nouveau)
                     }
 
-                    // ── Notes ────────────────────────────────────────────
-                    GlassCard {
-                        VStack(alignment: .leading, spacing: Spacing.sm) {
-                            Label("Notes", systemImage: "note.text")
-                                .font(.nutriHeadline).foregroundStyle(.gray)
-                            Divider()
-                            TextEditor(text: $notes)
-                                .frame(minHeight: 60, maxHeight: 100)
-                                .font(.nutriBody)
-                        }
+                if imc > 0 {
+                    HStack {
+                        Text("IMC calculé")
+                            .font(.nutriBody)
+                        Spacer()
+                        Text(imc.arrondi(1))
+                            .font(.nutriHeadline).foregroundStyle(imcCouleur)
+                        Text("— \(imcCategorie)")
+                            .font(.nutriCaption).foregroundStyle(imcCouleur)
                     }
                 }
-                .padding(Spacing.lg)
             }
 
-            Divider()
+            // ── Mensurations ─────────────────────────────────────────────
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                NutriSectionHeader("Mensurations", icon: "ruler.fill")
 
-            // ── Bouton Enregistrer ───────────────────────────────────────
-            HStack(spacing: Spacing.md) {
-                Spacer()
-                Button {
-                    // Vide le focus → commit la valeur active du TextField avant lecture
-                    champActif = false
-                    DispatchQueue.main.async { enregistrer() }
-                } label: {
-                    Text("Enregistrer")
-                        .font(.nutriHeadline).foregroundStyle(.white)
-                        .padding(.horizontal, Spacing.xl).padding(.vertical, Spacing.sm)
-                        .background(poids > 0 ? Color.blue : Color.gray,
-                                    in: RoundedRectangle(cornerRadius: Radius.md))
-                }
-                .buttonStyle(.plain)
-                .disabled(poids <= 0)
+                NutriField("Tour de taille", text: $tourTaille, variant: .decimal, placeholder: "0", suffix: "cm")
+                NutriField("Tour de hanches", text: $tourHanches, variant: .decimal, placeholder: "0", suffix: "cm")
+                NutriField("Poitrine", text: $poitrine, variant: .decimal, placeholder: "0", suffix: "cm")
+                NutriField("Bras droit", text: $bras, variant: .decimal, placeholder: "0", suffix: "cm")
+                NutriField("Cuisse", text: $cuisse, variant: .decimal, placeholder: "0", suffix: "cm")
+                NutriField("Masse grasse", text: $masseGrasse, variant: .decimal, placeholder: "0", suffix: "%")
             }
-            .padding(Spacing.lg)
-            .background(.ultraThinMaterial)
+
+            // ── Notes ────────────────────────────────────────────────────
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                NutriSectionHeader("Notes", icon: "note.text")
+                NutriField("", text: $notes, variant: .multiline(minLines: 3, maxLines: 5),
+                           placeholder: "Ressenti, contexte…")
+            }
+
+            // ── Bouton d'action ──────────────────────────────────────────
+            NutriButton("Enregistrer",
+                        icon: "checkmark.circle.fill",
+                        style: .primary,
+                        isDisabled: poids <= 0) {
+                enregistrer()
+            }
+            .padding(.top, Spacing.sm)
         }
-        .frame(minWidth: 440, idealWidth: 500, minHeight: 560)
-        .onAppear { poids = profil?.poidsActuel ?? 75.0 }
-    }
-
-    // MARK: - Ligne de mensuration
-
-    /// `@FocusState` est accessible directement via `$champActif` dans les méthodes du struct
-    private func mensurationLigne(_ label: String, value: Binding<Double>, unite: String) -> some View {
-        HStack {
-            Text(label)
-            Spacer()
-            TextField("0", value: value, format: .number.precision(.fractionLength(1)))
-                .multilineTextAlignment(.trailing)
-                .frame(width: 70)
-                .focused($champActif)   // commit au tap sur "Enregistrer"
-            Text(unite).foregroundStyle(.secondary).frame(width: 28, alignment: .leading)
+        .onAppear {
+            poids = profil?.poidsActuel ?? 75.0
+            poidsTexte = String(format: "%.1f", poids)
         }
     }
 
@@ -178,12 +121,12 @@ struct AddMetricView: View {
         viewModel.ajouterMetric(
             poids:       poids,
             bmi:         imc,
-            tourTaille:  tourTaille,
-            tourHanches: tourHanches,
-            poitrine:    poitrine,
-            bras:        bras,
-            cuisse:      cuisse,
-            masseGrasse: masseGrasse,
+            tourTaille:  Self.parse(tourTaille),
+            tourHanches: Self.parse(tourHanches),
+            poitrine:    Self.parse(poitrine),
+            bras:        Self.parse(bras),
+            cuisse:      Self.parse(cuisse),
+            masseGrasse: Self.parse(masseGrasse),
             notes:       notes,
             profileID:   activeProfileID,
             context:     modelContext
@@ -198,6 +141,10 @@ struct AddMetricView: View {
             }
         }
         dismiss()
+    }
+
+    private static func parse(_ s: String) -> Double {
+        Double(s.replacingOccurrences(of: ",", with: ".")) ?? 0
     }
 }
 

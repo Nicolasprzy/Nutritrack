@@ -7,6 +7,8 @@
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>NutriTrack enregistre votre poids et vos calories brûlées dans l'app Santé.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Utilisé pour scanner les codes-barres des aliments et les identifier automatiquement.</string>
+	<string>NutriTrack utilise la caméra pour scanner les codes-barres des aliments et prendre vos photos de progression.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>NutriTrack accède à votre photothèque pour importer vos photos de progression.</string>
 </dict>
 </plist>

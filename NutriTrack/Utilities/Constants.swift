@@ -1,53 +1,86 @@
 import SwiftUI
 
-// MARK: - Couleurs
+// MARK: - Palette Lumina (Her × Apple Vision Pro)
+// Fonds crème chauds, accents corail, texte brun chaud
 
-// Permet d'utiliser .nutriGreen directement dans .foregroundStyle()
 extension ShapeStyle where Self == Color {
-    static var nutriGreen: Color { Color(red: 0.2, green: 0.8, blue: 0.4) }
-    static var nutriGreenDark: Color { Color(red: 0.1, green: 0.65, blue: 0.3) }
-    static var proteineColor: Color { Color(red: 0.3, green: 0.6, blue: 1.0) }
-    static var glucideColor: Color { Color(red: 1.0, green: 0.75, blue: 0.2) }
-    static var lipideColor: Color { Color(red: 1.0, green: 0.35, blue: 0.35) }
+    // Accent principal Lumina — corail chaud
+    static var luminaEmber: Color    { Color(red: 0.910, green: 0.353, blue: 0.247) }
+    static var luminaEmberHot: Color { Color(red: 1.000, green: 0.478, blue: 0.333) }
+
+    // Compatibilité : redirige nutriGreen vers le vert fonctionnel nutrition
+    static var nutriGreen: Color     { Color(red: 0.267, green: 0.690, blue: 0.361) }
+    static var nutriGreenDark: Color { Color(red: 0.157, green: 0.549, blue: 0.267) }
+    static var proteineColor: Color  { Color(red: 0.298, green: 0.584, blue: 0.996) }
+    static var glucideColor: Color   { Color(red: 0.996, green: 0.753, blue: 0.200) }
+    static var lipideColor: Color    { Color(red: 0.996, green: 0.349, blue: 0.349) }
 }
 
 extension Color {
-    // Vert santé principal (style Apple Fitness)
-    static let nutriGreen = Color(red: 0.2, green: 0.8, blue: 0.4)
-    static let nutriGreenDark = Color(red: 0.1, green: 0.65, blue: 0.3)
+    // ── Lumina core palette ──────────────────────────────────────────────────
+    /// Fond principal — crème chaud (#f4ede4)
+    static let luminaBgDeep    = Color(red: 0.957, green: 0.929, blue: 0.894)
+    /// Fond légèrement plus clair (#f6efe7)
+    static let luminaBgVoid    = Color(red: 0.965, green: 0.937, blue: 0.906)
+    /// Encre principale — brun sombre (#2a1f17)
+    static let luminaInkPrimary   = Color(red: 0.165, green: 0.122, blue: 0.090)
+    /// Encre secondaire (#5c4a3d)
+    static let luminaInkSecondary = Color(red: 0.361, green: 0.290, blue: 0.239)
+    /// Encre atténuée (#8a7869)
+    static let luminaInkMuted     = Color(red: 0.541, green: 0.471, blue: 0.412)
+    /// Encre dim (#b8a697)
+    static let luminaInkDim       = Color(red: 0.722, green: 0.651, blue: 0.592)
+    /// Encre très légère — séparateurs (#e8ddd0)
+    static let luminaInkFaint     = Color(red: 0.910, green: 0.867, blue: 0.816)
 
-    // Macronutriments
-    static let proteineColor = Color(red: 0.3, green: 0.6, blue: 1.0)   // bleu
-    static let glucideColor  = Color(red: 1.0, green: 0.75, blue: 0.2)  // orange-jaune
-    static let lipideColor   = Color(red: 1.0, green: 0.35, blue: 0.35) // rouge-rose
+    // Accents corail
+    static let luminaEmber     = Color(red: 0.910, green: 0.353, blue: 0.247)  // #e85a3f
+    static let luminaEmberHot  = Color(red: 1.000, green: 0.478, blue: 0.333)  // #ff7a55
+    static let luminaEmberSoft = Color(red: 0.788, green: 0.290, blue: 0.188)  // #c94a30
+    static let luminaBlood     = Color(red: 0.722, green: 0.282, blue: 0.353)  // #b8485a
 
-    // Alerte / objectif dépassé
-    static let alerteOrange = Color(red: 1.0, green: 0.6, blue: 0.0)
+    // ── Compatibilité ancienne palette ──────────────────────────────────────
+    static let nutriGreen     = Color(red: 0.267, green: 0.690, blue: 0.361)
+    static let nutriGreenDark = Color(red: 0.157, green: 0.549, blue: 0.267)
+    static let proteineColor  = Color(red: 0.298, green: 0.584, blue: 0.996)
+    static let glucideColor   = Color(red: 0.996, green: 0.753, blue: 0.200)
+    static let lipideColor    = Color(red: 0.996, green: 0.349, blue: 0.349)
+    static let alerteOrange   = Color(red: 1.0, green: 0.6, blue: 0.0)
 
-    // Fond adaptatif
-    static var fondPrincipal: Color {
-        #if os(macOS)
-        return Color(nsColor: .windowBackgroundColor)
-        #else
-        return Color(uiColor: .systemGroupedBackground)
-        #endif
-    }
+    // ── Fond adaptatif — crème chaud Lumina ─────────────────────────────────
+    static var fondPrincipal: Color { .luminaBgDeep }
 }
 
-// MARK: - Typographie
+// MARK: - Typographie Lumina
 
 extension Font {
+    // ── Display serif (imite Fraunces via New York / system serif) ───────────
+    /// Grand titre cinématographique — italique serif fin
+    static func luminaDisplay(_ size: CGFloat, weight: Font.Weight = .thin) -> Font {
+        Font.system(size: size, weight: weight, design: .serif).italic()
+    }
+    /// Monospace UI — étiquettes, données chiffrées (imite JetBrains Mono)
+    static func luminaMono(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        Font.system(size: size, weight: weight, design: .monospaced)
+    }
+    /// Eyebrow tracké majuscule
+    static let luminaEyebrow = Font.system(size: 11, weight: .regular, design: .monospaced)
+    /// Étiquette carte
+    static let luminaCardLabel = Font.system(size: 10, weight: .regular, design: .monospaced)
+
+    // ── Compatibilité ────────────────────────────────────────────────────────
     static let nutriLargeTitle = Font.system(.largeTitle, design: .rounded, weight: .bold)
-    static let nutriTitle      = Font.system(.title, design: .rounded, weight: .semibold)
-    static let nutriTitle2     = Font.system(.title2, design: .rounded, weight: .semibold)
-    static let nutriHeadline   = Font.system(.headline, design: .rounded)
-    static let nutriBody       = Font.system(.body, design: .rounded)
-    static let nutriCaption    = Font.system(.caption, design: .rounded)
+    static let nutriTitle      = Font.system(.title,      design: .rounded, weight: .semibold)
+    static let nutriTitle2     = Font.system(.title2,     design: .rounded, weight: .semibold)
+    static let nutriHeadline   = Font.system(.headline,   design: .rounded)
+    static let nutriBody       = Font.system(.body,       design: .rounded)
+    static let nutriCaption    = Font.system(.caption,    design: .rounded)
 }
 
 // MARK: - Espacement
 
 enum Spacing {
+    static let xxs: CGFloat = 2
     static let xs: CGFloat  = 4
     static let sm: CGFloat  = 8
     static let md: CGFloat  = 16
@@ -151,8 +184,8 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     case dashboard  = "dashboard"
     case journal    = "journal"
     case corps      = "corps"
+    case photos     = "photos"
     case activite   = "activite"
-    case coach      = "coach"
     case profil     = "profil"
 
     var id: String { rawValue }
@@ -162,8 +195,8 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .dashboard: return "Tableau de bord"
         case .journal:   return "Nutrition"
         case .corps:     return "Corps & Forme"
+        case .photos:    return "Photos"
         case .activite:  return "Entraînement"
-        case .coach:     return "Coach IA"
         case .profil:    return "Profil"
         }
     }
@@ -173,8 +206,8 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .dashboard: return "chart.bar.fill"
         case .journal:   return "fork.knife"
         case .corps:     return "figure.arms.open"
+        case .photos:    return "photo.stack.fill"
         case .activite:  return "dumbbell.fill"
-        case .coach:     return "brain.head.profile"
         case .profil:    return "person.circle.fill"
         }
     }
@@ -184,8 +217,8 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .dashboard: return .nutriGreen
         case .journal:   return .orange
         case .corps:     return .blue
+        case .photos:    return .purple
         case .activite:  return .red
-        case .coach:     return .cyan
         case .profil:    return .gray
         }
     }
@@ -520,7 +553,4 @@ enum NiveauFaisabilite: String, Codable {
 enum APIConstants {
     static let openFoodFactsSearch  = "https://world.openfoodfacts.org/cgi/search.pl"
     static let openFoodFactsProduct = "https://world.openfoodfacts.org/api/v0/product"
-    static let claudeAPIEndpoint    = "https://api.anthropic.com/v1/messages"
-    static let claudeModel          = "claude-sonnet-4-20250514"
-    static let claudeVersion        = "2023-06-01"
 }

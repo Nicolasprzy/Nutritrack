@@ -9,7 +9,8 @@ struct AddActivityView: View {
 
     @State private var typeActivite: String = "Course à pied"
     @State private var dureeMinutes: Int = 30
-    @State private var caloriesBrulees: Double = 0
+    @State private var caloriesBrulees: Int = 0
+    @State private var caloriesTexte: String = "0"
     @State private var notes: String = ""
     @State private var calcul_auto: Bool = true
 
@@ -21,7 +22,7 @@ struct AddActivityView: View {
     private var dernierPoids: Double { metrics.first?.weight ?? 75.0 }
 
     private var caloriesCalculees: Double {
-        guard calcul_auto else { return caloriesBrulees }
+        guard calcul_auto else { return Double(caloriesBrulees) }
         return NutritionCalculator.caloriesBrulees(
             activite: typeActivite,
             dureeMin: dureeMinutes,
@@ -30,160 +31,103 @@ struct AddActivityView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Titre
-            HStack {
-                Text("Ajouter une activité")
-                    .font(.nutriTitle2)
-                    .padding(.leading, Spacing.lg)
-                Spacer()
-                Button("Annuler") { dismiss() }
-                    .padding(.trailing, Spacing.lg)
+        VStack(alignment: .leading, spacing: Spacing.lg) {
+
+            // ── Type d'activité ──────────────────────────────────────────
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                NutriSectionHeader("Type d'activité", icon: "figure.mixed.cardio")
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Spacing.sm) {
+                    ForEach(typesPredefinis, id: \.self) { type in
+                        Button(action: { typeActivite = type }) {
+                            HStack(spacing: Spacing.xs) {
+                                Image(systemName: iconeActivite(type))
+                                    .font(.nutriBody)
+                                Text(type)
+                                    .font(.nutriCaption)
+                                    .lineLimit(1)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, Spacing.sm)
+                            .padding(.horizontal, Spacing.sm)
+                            .background(
+                                typeActivite == type
+                                    ? Color.red.opacity(0.15)
+                                    : Color.secondary.opacity(0.08),
+                                in: RoundedRectangle(cornerRadius: Radius.sm)
+                            )
+                            .foregroundStyle(typeActivite == type ? .red : .primary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
             }
-            .padding(.vertical, Spacing.md)
-            .background(.ultraThinMaterial)
 
-            Divider()
+            // ── Durée ────────────────────────────────────────────────────
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                NutriSectionHeader("Durée", icon: "timer")
 
-            ScrollView {
-                VStack(spacing: Spacing.md) {
+                NutriStepper(
+                    title: "Durée",
+                    value: $dureeMinutes,
+                    step: 5,
+                    range: 1...300,
+                    suffix: "min"
+                )
+            }
 
-                    // Type
-                    GlassCard {
-                        VStack(alignment: .leading, spacing: Spacing.sm) {
-                            Label("Type d'activité", systemImage: "figure.mixed.cardio")
-                                .font(.nutriHeadline)
-                                .foregroundStyle(.red)
+            // ── Calories ─────────────────────────────────────────────────
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                NutriSectionHeader("Calories brûlées", icon: "flame.fill")
 
-                            Divider()
+                HStack {
+                    Text("Calcul automatique")
+                        .font(.nutriBody)
+                    Spacer()
+                    Toggle("", isOn: $calcul_auto).labelsHidden()
+                }
 
-                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Spacing.sm) {
-                                ForEach(typesPredefinis, id: \.self) { type in
-                                    Button(action: { typeActivite = type }) {
-                                        HStack(spacing: 6) {
-                                            Image(systemName: iconeActivite(type))
-                                                .font(.system(size: 14))
-                                            Text(type)
-                                                .font(.nutriCaption)
-                                                .lineLimit(1)
-                                        }
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 8)
-                                        .padding(.horizontal, 6)
-                                        .background(
-                                            typeActivite == type
-                                                ? Color.red.opacity(0.15)
-                                                : Color.secondary.opacity(0.08),
-                                            in: RoundedRectangle(cornerRadius: Radius.sm)
-                                        )
-                                        .foregroundStyle(typeActivite == type ? .red : .primary)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                        }
-                    }
-
-                    // Durée
-                    GlassCard {
-                        VStack(alignment: .leading, spacing: Spacing.sm) {
-                            Label("Durée", systemImage: "timer")
-                                .font(.nutriHeadline)
-                                .foregroundStyle(.orange)
-
-                            Divider()
-
-                            HStack {
-                                Text("Durée")
-                                Spacer()
-                                Stepper("\(dureeMinutes) min",
-                                        value: $dureeMinutes, in: 1...300, step: 5)
-                            }
-
-                            Slider(value: Binding(
-                                get: { Double(dureeMinutes) },
-                                set: { dureeMinutes = Int($0) }
-                            ), in: 5...180, step: 5)
-                            .tint(.orange)
-                        }
-                    }
-
-                    // Calories
-                    GlassCard {
-                        VStack(alignment: .leading, spacing: Spacing.sm) {
-                            Label("Calories brûlées", systemImage: "flame.fill")
-                                .font(.nutriHeadline)
-                                .foregroundStyle(.orange)
-
-                            Divider()
-
-                            HStack {
-                                Text("Calcul automatique")
-                                Spacer()
-                                Toggle("", isOn: $calcul_auto).labelsHidden()
-                            }
-
-                            if calcul_auto {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("Estimation")
-                                        Text("Basé sur votre poids (\(dernierPoids.arrondi(1)) kg)")
-                                            .font(.nutriCaption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                    Text("\(caloriesCalculees.arrondi(0)) kcal")
-                                        .font(.nutriTitle2)
-                                        .foregroundStyle(.orange)
-                                }
-                            } else {
-                                HStack {
-                                    Text("Calories brûlées")
-                                    Spacer()
-                                    TextField("0", value: $caloriesBrulees,
-                                              format: .number.precision(.fractionLength(0)))
-                                        .multilineTextAlignment(.trailing)
-                                        .frame(width: 80)
-                                    Text("kcal").foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                    }
-
-                    // Notes
-                    GlassCard {
-                        VStack(alignment: .leading, spacing: Spacing.sm) {
-                            Label("Notes", systemImage: "note.text")
-                                .font(.nutriHeadline)
-                                .foregroundStyle(.gray)
-                            Divider()
-                            TextEditor(text: $notes)
-                                .frame(minHeight: 50, maxHeight: 80)
+                if calcul_auto {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Estimation")
                                 .font(.nutriBody)
+                            Text("Basé sur votre poids (\(dernierPoids.arrondi(1)) kg)")
+                                .font(.nutriCaption)
+                                .foregroundStyle(.secondary)
                         }
+                        Spacer()
+                        Text("\(caloriesCalculees.arrondi(0)) kcal")
+                            .font(.nutriTitle2)
+                            .foregroundStyle(.orange)
                     }
+                } else {
+                    NutriField("Calories brûlées",
+                               text: $caloriesTexte,
+                               variant: .number,
+                               placeholder: "0",
+                               suffix: "kcal")
+                        .onChange(of: caloriesTexte) { _, nouveau in
+                            caloriesBrulees = Int(nouveau) ?? 0
+                        }
                 }
-                .padding(Spacing.lg)
             }
 
-            Divider()
-
-            HStack {
-                Spacer()
-                Button(action: enregistrer) {
-                    Text("Enregistrer")
-                        .font(.nutriHeadline)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, Spacing.xl)
-                        .padding(.vertical, Spacing.sm)
-                        .background(Color.red, in: RoundedRectangle(cornerRadius: Radius.md))
-                }
-                .buttonStyle(.plain)
+            // ── Notes ────────────────────────────────────────────────────
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                NutriSectionHeader("Notes", icon: "note.text")
+                NutriField("", text: $notes, variant: .multiline(minLines: 2, maxLines: 4),
+                           placeholder: "Ressenti, détails…")
             }
-            .padding(Spacing.lg)
-            .background(.ultraThinMaterial)
+
+            // ── Bouton d'action ──────────────────────────────────────────
+            NutriButton("Enregistrer",
+                        icon: "checkmark.circle.fill",
+                        style: .primary) {
+                enregistrer()
+            }
+            .padding(.top, Spacing.sm)
         }
-        .frame(minWidth: 460, idealWidth: 520, minHeight: 540)
     }
 
     private func iconeActivite(_ type: String) -> String {
@@ -204,7 +148,7 @@ struct AddActivityView: View {
             date:            Date(),
             activityType:    typeActivite,
             durationMinutes: dureeMinutes,
-            caloriesBurned:  calcul_auto ? caloriesCalculees : caloriesBrulees,
+            caloriesBurned:  calcul_auto ? caloriesCalculees : Double(caloriesBrulees),
             notes:           notes
         )
         activite.profileID = activeProfileID

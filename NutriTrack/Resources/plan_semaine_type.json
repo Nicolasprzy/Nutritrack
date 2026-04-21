@@ -1,0 +1,103 @@
+{
+  "title": "Plan semaine type — Nicolas",
+  "subtitle": "Démarrage 27 avril 2026",
+  "targets": {
+    "kcal": 2200,
+    "proteines_g": 200,
+    "glucides_g": 200,
+    "lipides_g": 75
+  },
+  "petitDejeuner": {
+    "titre": "Petit-déjeuner (identique 7j/7)",
+    "items": [
+      "300 g fromage blanc 0%",
+      "150 ml blanc d'œuf liquide",
+      "80 g flocons d'avoine",
+      "100 g myrtilles",
+      "2-3 tasses café noir"
+    ],
+    "macros": {"kcal": 566, "proteines_g": 52, "glucides_g": 75, "lipides_g": 6.5}
+  },
+  "dejeuners": [
+    {
+      "jours": ["Lundi", "Mardi", "Mercredi"],
+      "titre": "Bowl poulet-lentilles-légumes",
+      "items": [
+        "200 g blanc de poulet",
+        "160 g lentilles corail cuites",
+        "160 g légumes rôtis",
+        "150 g concombre",
+        "5 ml huile d'olive"
+      ],
+      "macros": {"kcal": 558, "proteines_g": 64, "glucides_g": 47, "lipides_g": 11}
+    },
+    {
+      "jours": ["Jeudi"],
+      "titre": "Bowl thon-riz-légumes",
+      "items": [
+        "150 g thon au naturel",
+        "180 g riz basmati cuit",
+        "160 g légumes rôtis",
+        "150 g tomates cerise",
+        "5 ml huile d'olive"
+      ],
+      "macros": {"kcal": 549, "proteines_g": 48, "glucides_g": 66, "lipides_g": 9}
+    },
+    {
+      "jours": ["Vendredi"],
+      "titre": "Bowl cabillaud-patate douce",
+      "items": [
+        "200 g cabillaud",
+        "200 g patate douce rôtie",
+        "160 g légumes rôtis",
+        "5 ml huile d'olive"
+      ],
+      "macros": {"kcal": 441, "proteines_g": 40, "glucides_g": 50, "lipides_g": 8}
+    }
+  ],
+  "collationPostEntrainement": {
+    "titre": "Collation post-entraînement",
+    "items": [
+      "30 g whey protéine",
+      "1 banane (120 g)"
+    ],
+    "macros": {"kcal": 222, "proteines_g": 25, "glucides_g": 29, "lipides_g": 2}
+  },
+  "diners": [
+    {
+      "jours": ["Lundi", "Jeudi"],
+      "titre": "Dîner A — Omelette-légumes",
+      "items": [
+        "3 œufs entiers",
+        "100 ml blanc d'œuf liquide",
+        "250 g haricots verts",
+        "150 g tomates",
+        "5 ml huile d'olive"
+      ],
+      "macros": {"kcal": 416, "proteines_g": 36, "glucides_g": 23, "lipides_g": 21}
+    },
+    {
+      "jours": ["Mardi", "Vendredi"],
+      "titre": "Dîner B — Viande rouge-légumes",
+      "items": [
+        "180 g steak haché 5%",
+        "200 g petits pois",
+        "150 g courgette rôtie"
+      ],
+      "macros": {"kcal": 433, "proteines_g": 50, "glucides_g": 32, "lipides_g": 10}
+    },
+    {
+      "jours": ["Mercredi"],
+      "titre": "Dîner C — Saumon-légumes",
+      "items": [
+        "180 g saumon",
+        "250 g brocoli",
+        "100 g quinoa cuit"
+      ],
+      "macros": {"kcal": 536, "proteines_g": 48, "glucides_g": 36, "lipides_g": 23}
+    }
+  ],
+  "weekEnd": {
+    "note": "Samedi + dimanche : variété libre dans l'esprit macros. 1 cheat meal programmé samedi soir. Refeed glucides le vendredi soir si sortie longue trail le samedi."
+  }
+}

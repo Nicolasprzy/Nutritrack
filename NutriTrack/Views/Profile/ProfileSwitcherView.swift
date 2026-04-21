@@ -54,44 +54,33 @@ struct ProfileSwitcherView: View {
                 }
 
                 // Bouton nouveau profil
-                Button(action: onNouveauProfil) {
-                    Label("Créer un nouveau profil", systemImage: "plus.circle.fill")
-                        .font(.nutriHeadline)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, Spacing.xl)
-                        .padding(.vertical, Spacing.md)
-                        .background(
-                            LinearGradient(colors: [Color.nutriGreen, Color.nutriGreen.opacity(0.8)],
-                                           startPoint: .leading, endPoint: .trailing),
-                            in: RoundedRectangle(cornerRadius: Radius.lg)
-                        )
-                        .shadow(color: Color.nutriGreen.opacity(0.3), radius: 8, x: 0, y: 4)
-                }
-                .buttonStyle(.plain)
+                NutriButton(
+                    "Créer un nouveau profil",
+                    icon: "plus.circle.fill",
+                    style: .primary,
+                    size: .large,
+                    action: onNouveauProfil
+                )
                 .padding(.bottom, Spacing.xl)
             }
-            .frame(maxWidth: 520)
+            .frame(maxWidth: NutriLayout.sheetCompactWidth)
         }
         .frame(minWidth: 400, minHeight: 400)
-        .confirmationDialog(
-            "Supprimer \(profilASupprimer?.prenom ?? "ce profil") ?",
+        .nutriConfirm(
+            title: "Supprimer \(profilASupprimer?.prenom ?? "ce profil") ?",
+            message: profilASupprimer.map {
+                "Le profil de \($0.prenom) sera définitivement supprimé. Cette action est irréversible."
+            } ?? "",
+            destructive: true,
+            confirmLabel: "Supprimer",
             isPresented: Binding(
                 get: { profilASupprimer != nil },
                 set: { if !$0 { profilASupprimer = nil } }
             ),
-            titleVisibility: .visible
-        ) {
-            Button("Supprimer", role: .destructive) {
+            onConfirm: {
                 supprimerProfil(profilASupprimer)
             }
-            Button("Annuler", role: .cancel) {
-                profilASupprimer = nil
-            }
-        } message: {
-            if let p = profilASupprimer {
-                Text("Le profil de \(p.prenom) sera définitivement supprimé. Cette action est irréversible.")
-            }
-        }
+        )
     }
 
     // MARK: - En-tête
@@ -107,12 +96,12 @@ struct ProfileSwitcherView: View {
                     .frame(width: 72, height: 72)
                     .shadow(color: Color.nutriGreen.opacity(0.35), radius: 14, x: 0, y: 7)
                 Image(systemName: "leaf.fill")
-                    .font(.system(size: 28))
+                    .font(.system(size: 28)) // icône hero
                     .foregroundStyle(.white)
             }
 
             Text("NutriTrack")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .font(.nutriTitle)
 
             Text(profiles.isEmpty ? "Créez votre premier profil" : "Choisissez votre profil")
                 .font(.nutriBody)
@@ -126,7 +115,7 @@ struct ProfileSwitcherView: View {
     private var emptyState: some View {
         VStack(spacing: Spacing.md) {
             Image(systemName: "person.crop.circle.badge.plus")
-                .font(.system(size: 48))
+                .font(.system(size: 48)) // icône hero ≥ 40 — conservée
                 .foregroundStyle(Color.secondary.opacity(0.4))
             Text("Aucun profil pour l'instant")
                 .font(.nutriBody)
@@ -156,11 +145,6 @@ struct ProfileSwitcherView: View {
             predicate: #Predicate { $0.profileID == pid }
         ))) ?? []
         activites.forEach { modelContext.delete($0) }
-
-        let plans = (try? modelContext.fetch(FetchDescriptor<UserPlan>(
-            predicate: #Predicate { $0.profileID == pid }
-        ))) ?? []
-        plans.forEach { modelContext.delete($0) }
 
         if activeProfileID == pid { activeProfileID = "" }
         modelContext.delete(p)
@@ -224,7 +208,7 @@ private struct ProfilCard: View {
                             .foregroundStyle(Color.nutriGreen)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 2)
-                            .background(Color.nutriGreen.opacity(0.12), in: Capsule())
+                            .background { Capsule().fill(Color.nutriGreen.opacity(0.12)) }
                     }
                 }
                 .frame(maxWidth: .infinity)

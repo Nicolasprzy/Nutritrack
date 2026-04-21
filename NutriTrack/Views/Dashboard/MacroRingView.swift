@@ -84,13 +84,13 @@ struct MacroRingView: View {
     private var texteCenter: some View {
         VStack(spacing: 2) {
             Text(caloriesConsommees.arrondi(0))
-                .font(.system(size: 26, weight: .bold, design: .rounded))
+                .font(.system(size: 26, weight: .bold, design: .rounded)) // calibrage visuel centre ring — justifié
                 .monospacedDigit()
             Text("kcal")
-                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .font(.nutriCaption2)
                 .foregroundStyle(.secondary)
             Text("/ \(caloriesObjectif.arrondi(0))")
-                .font(.system(size: 11, design: .rounded))
+                .font(.nutriCaption2)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
         }
@@ -117,9 +117,9 @@ struct MacroRingLegende: View {
             Circle().fill(couleur).frame(width: 10, height: 10)
             VStack(alignment: .leading, spacing: 0) {
                 Text("\(valeur.arrondi(0)) g")
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .font(.nutriBodyBold)
                 Text(nom)
-                    .font(.system(size: 11, design: .rounded))
+                    .font(.nutriCaption2)
                     .foregroundStyle(.secondary)
             }
         }

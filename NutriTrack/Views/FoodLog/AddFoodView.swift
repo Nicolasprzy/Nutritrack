@@ -46,65 +46,82 @@ struct AddFoodView: View {
     // MARK: - État formulaire Manuel
     @State private var manuelNom: String = ""
     @State private var manuelMarque: String = ""
-    @State private var manuelCalories: Double? = nil
-    @State private var manuelProteines: Double? = nil
-    @State private var manuelGlucides: Double? = nil
-    @State private var manuelLipides: Double? = nil
-    @State private var manuelFibres: Double? = nil
+    @State private var manuelCalories: String = ""
+    @State private var manuelProteines: String = ""
+    @State private var manuelGlucides: String = ""
+    @State private var manuelLipides: String = ""
+    @State private var manuelFibres: String = ""
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                Picker("Onglet", selection: $ongletActif) {
-                    ForEach(Onglet.allCases, id: \.self) { onglet in
-                        Label(onglet.rawValue, systemImage: onglet.icone)
-                            .tag(onglet)
-                    }
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text("Ajouter un aliment")
+                    .font(.nutriTitle2)
+                    .foregroundStyle(Color.nutriTextPrimary)
+                Spacer()
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(Color.nutriTextSecondary)
+                        .symbolRenderingMode(.hierarchical)
                 }
-                .pickerStyle(.segmented)
+                .buttonStyle(.plain)
+                .keyboardShortcut(".", modifiers: .command)
+            }
+            .padding(.horizontal, Spacing.lg)
+            .padding(.vertical, Spacing.md)
+
+            Divider().overlay(Color.nutriBorder)
+
+            NutriPicker("Onglet", selection: $ongletActif,
+                        options: Onglet.allCases.map {
+                            NutriPickerOption($0, label: $0.rawValue, icon: $0.icone)
+                        },
+                        forceStyle: .segmented)
                 .padding(.horizontal, Spacing.md)
                 .padding(.vertical, Spacing.sm)
 
-                Divider()
+            Divider()
 
-                Group {
-                    switch ongletActif {
-                    case .favoris:   favorisView
-                    case .recherche: rechercheView
-                    case .recents:   recentsView
-                    case .scanner:   scannerView
-                    case .manuel:    manuelView
-                    }
-                }
-            }
-            .navigationTitle("Ajouter un aliment")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Fermer") { dismiss() }
-                }
-            }
-            .sheet(isPresented: $showDetail) {
-                if let item = foodSelectionne {
-                    FoodDetailView(
-                        foodItem: item,
-                        mealType: mealType,
-                        dateSelectionnee: dateSelectionnee,
-                        onAjoute: {
-                            favoris = service.alimentsFavoris(context: modelContext)
-                            recents = service.derniersAlimentsUtilises(context: modelContext)
-                            onAjoute?()
-                            dismiss()
-                        }
-                    )
+            Group {
+                switch ongletActif {
+                case .favoris:   favorisView
+                case .recherche: rechercheView
+                case .recents:   recentsView
+                case .scanner:   scannerView
+                case .manuel:    manuelView
                 }
             }
         }
         #if os(macOS)
-        .frame(minWidth: 540, idealWidth: 600, maxWidth: 800, minHeight: 560)
+        .frame(minWidth: NutriLayout.sheetLargeWidth,
+               idealWidth: NutriLayout.sheetLargeWidth,
+               minHeight: NutriLayout.sheetLargeHeight)
         #endif
+        .nutriSheet(title: "Ajouter au journal", size: .standard, isPresented: $showDetail) {
+            if let item = foodSelectionne {
+                FoodDetailView(
+                    foodItem: item,
+                    mealType: mealType,
+                    dateSelectionnee: dateSelectionnee,
+                    onAjoute: {
+                        favoris = service.alimentsFavoris(context: modelContext)
+                        recents = service.derniersAlimentsUtilises(context: modelContext)
+                        onAjoute?()
+                        dismiss()
+                    }
+                )
+            }
+        }
+        .nutriSheet(title: "Scanner un code-barres", size: .compact, isPresented: $showScanner) {
+            BarcodeScannerView(
+                codeScanne: $codeScanne,
+                isPresented: $showScanner
+            ) { code in
+                Task { await rechercherParCode(code) }
+            }
+        }
         .onAppear {
             recents  = service.derniersAlimentsUtilises(context: modelContext)
             favoris  = service.alimentsFavoris(context: modelContext)
@@ -118,43 +135,24 @@ struct AddFoodView: View {
 
             // Barre de recherche
             HStack(spacing: Spacing.sm) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-
-                TextField("Rechercher un aliment…", text: $recherche)
+                NutriField("", text: $recherche, placeholder: "Rechercher un aliment…",
+                           prefix: "🔍")
                     #if os(iOS)
                     .submitLabel(.search)
                     #endif
-                    .onSubmit {
-                        lancerRechercheDebounce(immediate: true)
-                    }
-                    .onChange(of: recherche) { _, nouveau in
+                    .onChange(of: recherche) { _, _ in
                         lancerRechercheDebounce(immediate: false)
                     }
 
-                if !recherche.isEmpty {
-                    Button(action: {
-                        recherche = ""
-                        resultats = []
-                        searchTask?.cancel()
-                    }) {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                // Indicateur : spinner réseau OU coche locale
                 if service.isLoading {
                     ProgressView().controlSize(.small)
                 } else if resultatsLocauxSeulement && !resultats.isEmpty {
                     Image(systemName: "externaldrive.badge.checkmark")
-                        .font(.caption2)
+                        .font(.nutriCaption2)
                         .foregroundStyle(.secondary)
                         .help("Résultats locaux — enrichissement réseau en cours")
                 }
             }
-            .padding(Spacing.sm)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Radius.md))
             .padding(.horizontal, Spacing.md)
             .padding(.top, Spacing.sm)
 
@@ -163,18 +161,18 @@ struct AddFoodView: View {
                 HStack {
                     if let erreur = service.errorMessage {
                         Label(erreur, systemImage: "wifi.slash")
-                            .font(.caption2).foregroundStyle(.orange)
+                            .font(.nutriCaption2).foregroundStyle(.orange)
                     } else if !resultats.isEmpty {
                         Text("\(resultats.count) résultat\(resultats.count > 1 ? "s" : "")")
-                            .font(.caption2).foregroundStyle(.secondary)
+                            .font(.nutriCaption2).foregroundStyle(.secondary)
                         if resultatsLocauxSeulement {
-                            Text("· recherche en ligne…").font(.caption2).foregroundStyle(.secondary.opacity(0.6))
+                            Text("· recherche en ligne…").font(.nutriCaption2).foregroundStyle(.secondary.opacity(0.6))
                         }
                     }
                     Spacer()
                 }
                 .padding(.horizontal, Spacing.md)
-                .padding(.top, 4)
+                .padding(.top, Spacing.xs)
             }
 
             // Résultats / état vide
@@ -186,28 +184,25 @@ struct AddFoodView: View {
                         description: Text("Essayez un autre terme ou vérifiez l'orthographe.")
                     )
                     // Bouton créer manuellement
-                    Button(action: { ongletActif = .manuel }) {
-                        Label("Créer cet aliment manuellement", systemImage: "plus.circle.fill")
-                            .font(.nutriBody.bold())
-                            .frame(maxWidth: .infinity)
-                            .padding(Spacing.sm)
+                    NutriButton("Créer cet aliment manuellement",
+                                icon: "plus.circle.fill",
+                                style: .primary) {
+                        ongletActif = .manuel
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Color.nutriGreen)
                     .padding(.horizontal, Spacing.md)
 
                     // Suggestions
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: Spacing.xs) {
                         Text("💡 Astuces :")
                             .font(.nutriCaption).bold()
                         Text("• Utilisez des termes simples : « poulet » plutôt que « filet de poulet grillé »")
                         Text("• Sans accents ça marche aussi : « café » = « cafe »")
                         Text("• Scannez le code-barres du produit pour un résultat exact")
                     }
-                    .font(.caption)
+                    .font(.nutriCaption)
                     .foregroundStyle(.secondary)
                     .padding(Spacing.md)
-                    .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: Radius.md))
+                    .background { RoundedRectangle(cornerRadius: Radius.md).fill(Color.secondary.opacity(0.05)) }
                     .padding(.horizontal, Spacing.md)
                 }
                 .padding(.top, Spacing.lg)
@@ -266,7 +261,7 @@ struct AddFoodView: View {
                 Button(action: { showScanner = true }) {
                     VStack(spacing: Spacing.md) {
                         Image(systemName: "barcode.viewfinder")
-                            .font(.system(size: 64))
+                            .font(.system(size: 64)) // icône hero
                             .foregroundStyle(Color.nutriGreen)
                         Text("Scanner un code-barres").font(.nutriTitle2)
                         Text("Ou saisissez le code manuellement")
@@ -278,143 +273,64 @@ struct AddFoodView: View {
                 .buttonStyle(.plain)
             }
         }
-        .sheet(isPresented: $showScanner) {
-            BarcodeScannerView(
-                codeScanne: $codeScanne,
-                isPresented: $showScanner
-            ) { code in
-                Task { await rechercherParCode(code) }
-            }
-        }
     }
 
     // MARK: - Onglet Manuel
 
     private var manuelView: some View {
         ScrollView {
-            VStack(spacing: Spacing.md) {
+            VStack(alignment: .leading, spacing: Spacing.md) {
 
                 // ── En-tête ──────────────────────────────────────────────
-                HStack(spacing: 8) {
-                    Image(systemName: "square.and.pencil")
-                        .foregroundStyle(Color.nutriGreen)
-                    Text("Créer un aliment")
-                        .font(.nutriHeadline)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, Spacing.md)
-                .padding(.top, Spacing.sm)
+                NutriSectionHeader("Créer un aliment", icon: "square.and.pencil")
 
                 // ── Identité ─────────────────────────────────────────────
-                GlassCard {
-                    VStack(spacing: 0) {
-                        manuelLigne(label: "Nom *") {
-                            TextField("Ex. : Poulet grillé maison", text: $manuelNom)
-                                .multilineTextAlignment(.trailing)
-                        }
-                        Divider()
-                        manuelLigne(label: "Marque") {
-                            TextField("Optionnel", text: $manuelMarque)
-                                .multilineTextAlignment(.trailing)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .padding(.horizontal, Spacing.md)
+                NutriField("Nom *", text: $manuelNom, placeholder: "Ex. : Poulet grillé maison")
+                NutriField("Marque", text: $manuelMarque, placeholder: "Optionnel")
 
                 // ── Valeurs pour 100 g ───────────────────────────────────
-                GlassCard {
-                    VStack(alignment: .leading, spacing: Spacing.sm) {
-                        Label("Valeurs pour 100 g", systemImage: "chart.bar.fill")
-                            .font(.nutriHeadline)
-                            .foregroundStyle(Color.nutriGreen)
-                        Divider()
-                        manuelLigneNutri(label: "Calories", unite: "kcal",
-                                         couleur: .orange, valeur: $manuelCalories)
-                        Divider()
-                        manuelLigneNutri(label: "Protéines", unite: "g",
-                                         couleur: .proteineColor, valeur: $manuelProteines)
-                        Divider()
-                        manuelLigneNutri(label: "Glucides", unite: "g",
-                                         couleur: .glucideColor, valeur: $manuelGlucides)
-                        Divider()
-                        manuelLigneNutri(label: "Lipides", unite: "g",
-                                         couleur: .lipideColor, valeur: $manuelLipides)
-                        Divider()
-                        manuelLigneNutri(label: "Fibres", unite: "g",
-                                         couleur: .secondary, valeur: $manuelFibres)
-                    }
-                }
-                .padding(.horizontal, Spacing.md)
+                NutriSectionHeader("Valeurs pour 100 g", icon: "chart.bar.fill")
+
+                NutriField("Calories",   text: $manuelCalories,  variant: .decimal, placeholder: "0", suffix: "kcal")
+                NutriField("Protéines",  text: $manuelProteines, variant: .decimal, placeholder: "0", suffix: "g")
+                NutriField("Glucides",   text: $manuelGlucides,  variant: .decimal, placeholder: "0", suffix: "g")
+                NutriField("Lipides",    text: $manuelLipides,   variant: .decimal, placeholder: "0", suffix: "g")
+                NutriField("Fibres",     text: $manuelFibres,    variant: .decimal, placeholder: "0", suffix: "g")
 
                 // ── Bouton créer ─────────────────────────────────────────
-                Button(action: creerAlimentManuel) {
-                    Label("Créer et sélectionner", systemImage: "checkmark.circle.fill")
-                        .font(.nutriBody.bold())
-                        .frame(maxWidth: .infinity)
-                        .padding(Spacing.sm)
+                NutriButton("Créer et sélectionner",
+                            icon: "checkmark.circle.fill",
+                            style: .primary,
+                            isDisabled: manuelNom.trimmingCharacters(in: .whitespaces).isEmpty
+                                        || Self.parseDouble(manuelCalories) == nil) {
+                    creerAlimentManuel()
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(Color.nutriGreen)
-                .disabled(manuelNom.trimmingCharacters(in: .whitespaces).isEmpty
-                          || manuelCalories == nil)
-                .padding(.horizontal, Spacing.md)
 
                 Text("* Nom et calories sont obligatoires")
-                    .font(.caption2)
+                    .font(.nutriCaption2)
                     .foregroundStyle(.secondary)
             }
-            .padding(.bottom, Spacing.lg)
+            .padding(Spacing.md)
         }
     }
 
-    private func manuelLigne<Content: View>(label: String,
-                                            @ViewBuilder content: () -> Content) -> some View {
-        HStack {
-            Text(label).font(.nutriBody)
-            Spacer()
-            content()
-        }
-        .padding(.vertical, Spacing.xs)
-    }
-
-    private func manuelLigneNutri(label: String, unite: String,
-                                   couleur: Color, valeur: Binding<Double?>) -> some View {
-        HStack {
-            Circle()
-                .fill(couleur.opacity(0.2))
-                .frame(width: 8, height: 8)
-            Text(label).font(.nutriBody)
-            Spacer()
-            TextField("0", value: valeur, format: .number.precision(.fractionLength(1)))
-                .multilineTextAlignment(.trailing)
-                .frame(width: 70)
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
-                .foregroundStyle(couleur)
-                #if os(iOS)
-                .keyboardType(.decimalPad)
-                #endif
-            Text(unite)
-                .font(.nutriCaption)
-                .foregroundStyle(.secondary)
-                .frame(width: 28, alignment: .leading)
-        }
-        .padding(.vertical, Spacing.xs)
+    private static func parseDouble(_ s: String) -> Double? {
+        Double(s.replacingOccurrences(of: ",", with: "."))
     }
 
     private func creerAlimentManuel() {
         let nom = manuelNom.trimmingCharacters(in: .whitespaces)
-        guard !nom.isEmpty, let cal = manuelCalories else { return }
+        guard !nom.isEmpty, let cal = Self.parseDouble(manuelCalories) else { return }
 
         let item = FoodItem(
             name:           nom,
             brand:          manuelMarque.trimmingCharacters(in: .whitespaces),
             calories:       cal,
-            proteins:       manuelProteines ?? 0,
-            carbohydrates:  manuelGlucides  ?? 0,
-            fats:           manuelLipides   ?? 0
+            proteins:       Self.parseDouble(manuelProteines) ?? 0,
+            carbohydrates:  Self.parseDouble(manuelGlucides)  ?? 0,
+            fats:           Self.parseDouble(manuelLipides)   ?? 0
         )
-        item.fiber  = manuelFibres ?? 0
+        item.fiber  = Self.parseDouble(manuelFibres) ?? 0
         item.source = "Manuel"
         modelContext.insert(item)
         try? modelContext.save()
@@ -425,8 +341,8 @@ struct AddFoodView: View {
 
         // Réinitialiser le formulaire
         manuelNom = ""; manuelMarque = ""
-        manuelCalories = nil; manuelProteines = nil
-        manuelGlucides = nil; manuelLipides = nil; manuelFibres = nil
+        manuelCalories = ""; manuelProteines = ""
+        manuelGlucides = ""; manuelLipides = ""; manuelFibres = ""
     }
 
     // MARK: - Liste commune

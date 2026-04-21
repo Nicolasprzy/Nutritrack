@@ -39,15 +39,28 @@ struct ContentView: View {
     }
 
     private var mainContent: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            SidebarView(selection: $selection)
-                .environment(\.activeProfileID, activeProfileID)
-        } detail: {
-            detailView
-                .animation(.easeInOut(duration: 0.2), value: selection)
-                .environment(\.activeProfileID, activeProfileID)
+        ZStack {
+            // ── Fond ambiant Lumina ──────────────────────────────────────────
+            AmbientBackground()
+                .ignoresSafeArea()
+
+            // ── Grain film subtil ────────────────────────────────────────────
+            GrainOverlay()
+                .ignoresSafeArea()
+
+            // ── Navigation principale ────────────────────────────────────────
+            NavigationSplitView(columnVisibility: $columnVisibility) {
+                SidebarView(selection: $selection)
+                    .environment(\.activeProfileID, activeProfileID)
+            } detail: {
+                detailView
+                    .animation(.easeInOut(duration: 0.2), value: selection)
+                    .environment(\.activeProfileID, activeProfileID)
+            }
+            .navigationSplitViewStyle(.balanced)
+            // Fond transparent pour laisser l'ambient background visible
+            .background(.clear)
         }
-        .navigationSplitViewStyle(.balanced)
     }
 
     @ViewBuilder
@@ -59,10 +72,10 @@ struct ContentView: View {
             FoodLogView()
         case .corps:
             BodyTrackingView()
+        case .photos:
+            ProgressPhotosView()
         case .activite:
             ActivityView()
-        case .coach:
-            AICoachView()
         case .profil:
             ProfileView(onDeconnexion: {
                 activeProfileID = ""
@@ -77,7 +90,7 @@ struct ContentView: View {
     ContentView()
         .modelContainer(for: [
             FoodItem.self, FoodEntry.self, BodyMetric.self,
-            ActivityEntry.self, MealPlan.self, UserProfile.self
+            ActivityEntry.self, UserProfile.self
         ], inMemory: true)
         .frame(width: 1000, height: 700)
 }

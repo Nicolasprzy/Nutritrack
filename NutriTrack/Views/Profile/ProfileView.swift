@@ -19,7 +19,6 @@ struct ProfileView: View {
     @State private var objectifProteines: Double = 150.0
     @State private var objectifGlucides: Double = 200.0
     @State private var objectifLipides: Double = 65.0
-    @State private var claudeAPIKey: String = ""
     @State private var healthKitActif: Bool = false
 
     // MARK: - Champs v2
@@ -51,11 +50,7 @@ struct ProfileView: View {
     @State private var tabac: Bool = false
     @State private var hydratation: Double = 1.5
 
-    @State private var healthKitService = HealthKitService()
-    @State private var showAPIKeyHelp = false
     @State private var isSaved = false
-    @State private var showResetConfirm = false
-    @State private var showDeleteConfirm = false
 
     @Query(sort: \BodyMetric.date, order: .reverse) private var metrics: [BodyMetric]
     @Query private var entries: [FoodEntry]
@@ -81,10 +76,30 @@ struct ProfileView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: Spacing.lg) {
+                LuminaSectionHeader(
+                    eyebrow: "Acte VI · Identité",
+                    title: "Profil",
+                    emphasis: "& paramètres."
+                )
+                .padding(.top, Spacing.sm)
+
                 // 1. Qui suis-je
-                informationsSection
+                ProfileHeaderSection(
+                    prenom: $prenom,
+                    dateNaissance: $dateNaissance,
+                    sexe: $sexe,
+                    taille: $taille,
+                    objectifPoids: $objectifPoids
+                )
                 // 2. Corps & silhouette (actuelle → objectif + date + réévaluation)
-                silhouetteSection
+                ProfileGoalsSection(
+                    sexe: $sexe,
+                    silhouetteActuelle: $silhouetteActuelle,
+                    silhouetteObjectif: $silhouetteObjectif,
+                    dateObjectif: $dateObjectif,
+                    frequenceReevaluation: $frequenceReevaluation,
+                    approcheTransformation: $approcheTransformation
+                )
                 // 3. Objectifs & macros (TDEE + macros)
                 objectifsSection
                 macrosSection
@@ -93,15 +108,30 @@ struct ProfileView: View {
                 nutritionSection
                 vieSection
                 // 5. Outils
-                coachIASection
-                healthKitSection
+                ProfileHealthKitSection(healthKitActif: $healthKitActif)
+                ProfileExportSection()
                 // 6. Compte
                 statsSection
-                compteSection
+
+                // Sprint 3 — Objectifs physiques + cibles macro + actions plan nutrition
+                if let profil = profilActif {
+                    ObjectifsPhysiquesSection(profil: profil)
+                    CiblesMacroSection(profileID: activeProfileID)
+                    PlanNutritionActionsSection(profil: profil)
+                }
+
+                ProfileDangerSection(
+                    prenomProfil: profilActif?.prenom ?? "",
+                    onDeconnexion: onDeconnexion,
+                    onNouveauProfil: onNouveauProfil,
+                    onReinitialiser: reinitialiserProfil,
+                    onSupprimer: supprimerCeProfil
+                )
             }
             .padding(Spacing.lg)
         }
-        .navigationTitle("Profil")
+        .navigationTitle("")
+        .background(Color.fondPrincipal.opacity(0.70))
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: sauvegarder) {
@@ -124,199 +154,6 @@ struct ProfileView: View {
         .onChange(of: silhouetteActuelle)      { _, _ in recalculerMacros() }
         .onChange(of: dateObjectif)            { _, _ in recalculerMacros() }
         .onChange(of: niveauActivite)          { _, _ in recalculerMacros() }
-    }
-
-    // MARK: - Informations personnelles
-
-    private var informationsSection: some View {
-        profileSection(titre: "Informations personnelles", icone: "person.fill", couleur: .blue) {
-
-            // ── Avatar + Prénom ───────────────────────────────────────────
-            HStack(spacing: Spacing.md) {
-                // Cercle initiales
-                ZStack {
-                    Circle()
-                        .fill(Color.blue.opacity(0.12))
-                        .frame(width: 54, height: 54)
-                    Circle()
-                        .strokeBorder(Color.blue.opacity(0.25), lineWidth: 1.5)
-                        .frame(width: 54, height: 54)
-                    Text(prenom.prefix(1).uppercased().isEmpty
-                         ? "?" : String(prenom.prefix(1).uppercased()))
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
-                        .foregroundStyle(.blue)
-                }
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Prénom")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .textCase(.uppercase)
-                    TextField("Votre prénom", text: $prenom)
-                        .font(.system(size: 17, weight: .semibold))
-                        .textFieldStyle(.plain)
-                }
-            }
-            .padding(.vertical, Spacing.xs)
-
-            Divider()
-
-            // ── Date de naissance ─────────────────────────────────────────
-            VStack(alignment: .leading, spacing: Spacing.sm) {
-                HStack(spacing: 6) {
-                    Image(systemName: "birthday.cake.fill")
-                        .font(.caption)
-                        .foregroundStyle(.blue)
-                    Text("Date de naissance")
-                        .font(.nutriBody)
-                    Spacer()
-                    // Badge âge
-                    Text("\(dateNaissance.age) ans")
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.blue)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(Color.blue.opacity(0.1), in: Capsule())
-                }
-                // Sélecteur de date stylisé dans une capsule
-                HStack {
-                    DatePicker("", selection: $dateNaissance, displayedComponents: .date)
-                        .labelsHidden()
-                        .datePickerStyle(.compact)
-                        .tint(.blue)
-                    Spacer()
-                }
-                .padding(.horizontal, Spacing.sm)
-                .padding(.vertical, 8)
-                .background(Color.blue.opacity(0.05), in: RoundedRectangle(cornerRadius: Radius.sm))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Radius.sm)
-                        .strokeBorder(Color.blue.opacity(0.15), lineWidth: 1)
-                )
-            }
-            .padding(.vertical, Spacing.xs)
-
-            Divider()
-
-            // ── Sexe — segmented ─────────────────────────────────────────
-            VStack(alignment: .leading, spacing: Spacing.xs) {
-                HStack(spacing: 6) {
-                    Image(systemName: "person.2.fill")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("Sexe").font(.nutriBody)
-                }
-                Picker("", selection: $sexe) {
-                    ForEach(Sexe.allCases, id: \.self) { s in
-                        Text(s.label).tag(s.rawValue)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-            }
-            .padding(.vertical, Spacing.xs)
-
-            Divider()
-
-            // ── Taille ────────────────────────────────────────────────────
-            HStack {
-                HStack(spacing: 6) {
-                    Image(systemName: "ruler.fill")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("Taille").font(.nutriBody)
-                }
-                Spacer()
-                Stepper(value: $taille, in: 100...250, step: 0.5) {
-                    Text("\(taille.arrondi(0)) cm")
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
-                        .foregroundStyle(.primary)
-                }
-            }
-            .padding(.vertical, 2)
-
-            Divider()
-
-            // ── Objectif poids ────────────────────────────────────────────
-            HStack {
-                HStack(spacing: 6) {
-                    Image(systemName: "scalemass.fill")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("Objectif poids").font(.nutriBody)
-                }
-                Spacer()
-                HStack(spacing: 4) {
-                    TextField("75", value: $objectifPoids,
-                              format: .number.precision(.fractionLength(1)))
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 60)
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
-                    Text("kg")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(.vertical, 2)
-        }
-    }
-
-    // MARK: - Corps & Silhouette (v2)
-
-    private var silhouetteSection: some View {
-        profileSection(titre: "Corps & Silhouette", icone: "figure.arms.open", couleur: .teal) {
-            // Silhouette actuelle
-            VStack(alignment: .leading, spacing: Spacing.xs) {
-                HStack(spacing: 6) {
-                    Image(systemName: "person.fill").foregroundStyle(.secondary).font(.caption)
-                    Text("Silhouette actuelle").font(.nutriBody)
-                }
-                SilhouettePicker(
-                    sexe: Sexe(rawValue: sexe) ?? .homme,
-                    selection: $silhouetteActuelle
-                )
-                .frame(height: 130)
-            }
-
-            Divider()
-
-            // Silhouette objectif
-            VStack(alignment: .leading, spacing: Spacing.xs) {
-                HStack(spacing: 6) {
-                    Image(systemName: "target").foregroundStyle(Color.nutriGreen).font(.caption)
-                    Text("Silhouette objectif").font(.nutriBody)
-                }
-                SilhouettePicker(
-                    sexe: Sexe(rawValue: sexe) ?? .homme,
-                    selection: $silhouetteObjectif
-                )
-                .frame(height: 130)
-            }
-
-            Divider()
-            profileRow("Date objectif") {
-                DatePicker("", selection: $dateObjectif, in: Date()..., displayedComponents: .date)
-                    .labelsHidden()
-            }
-            Divider()
-            profileRow("Réévaluation") {
-                Stepper("\(frequenceReevaluation) jours", value: $frequenceReevaluation, in: 7...60, step: 7)
-            }
-            Divider()
-            // Approche de transformation — aperçu réactif complet
-            ApprochePreviewCard(
-                poids:               dernierPoids > 0 ? dernierPoids : objectifPoids,
-                taille:              taille,
-                age:                 dateNaissance.age,
-                sexe:                sexe,
-                niveauActivite:      niveauActivite,
-                silhouetteActuelle:  silhouetteActuelle,
-                silhouetteObjectif:  silhouetteObjectif,
-                dateObjectif:        dateObjectif,
-                approcheTransformation: $approcheTransformation
-            )
-            .padding(.vertical, Spacing.xs)
-        }
     }
 
     // MARK: - Sport (v2)
@@ -495,82 +332,6 @@ struct ProfileView: View {
         }
     }
 
-    // MARK: - Coach IA
-
-    private var coachIASection: some View {
-        profileSection(titre: "Coach IA", icone: "brain.head.profile", couleur: .cyan) {
-            VStack(alignment: .leading, spacing: Spacing.sm) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Clé API Claude")
-                            .font(.nutriHeadline)
-                        Text("Depuis console.anthropic.com")
-                            .font(.nutriCaption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button(action: { showAPIKeyHelp.toggle() }) {
-                        Image(systemName: "questionmark.circle")
-                            .foregroundStyle(.cyan)
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                SecureField("sk-ant-api...", text: $claudeAPIKey)
-                    .font(.system(.body, design: .monospaced))
-                    .textFieldStyle(.roundedBorder)
-
-                if !claudeAPIKey.isEmpty {
-                    HStack(spacing: 4) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(Color.nutriGreen)
-                        Text("Clé configurée")
-                            .font(.nutriCaption)
-                            .foregroundStyle(Color.nutriGreen)
-                    }
-                }
-            }
-        }
-        .alert("Clé API Claude", isPresented: $showAPIKeyHelp) {
-            Button("OK") {}
-        } message: {
-            Text("Créez un compte sur console.anthropic.com, puis générez une clé API dans la section \"API Keys\".")
-        }
-    }
-
-    // MARK: - HealthKit
-
-    private var healthKitSection: some View {
-        profileSection(titre: "Santé", icone: "heart.fill", couleur: .red) {
-            profileRow("Synchroniser avec HealthKit") {
-                Toggle("", isOn: $healthKitActif)
-                    .labelsHidden()
-                    .onChange(of: healthKitActif) { _, actif in
-                        if actif { Task { await healthKitService.demanderAutorisation() } }
-                    }
-            }
-
-            if healthKitActif && healthKitService.isAuthorized {
-                Divider()
-                Button(action: {
-                    Task { await healthKitService.importerPoidsDansSwiftData(context: modelContext) }
-                }) {
-                    Label("Importer mes données de poids", systemImage: "arrow.down.circle")
-                        .foregroundStyle(.red)
-                }
-                .buttonStyle(.plain)
-                .padding(.vertical, 4)
-            }
-
-            if !healthKitService.isAvailable {
-                Divider()
-                Text("HealthKit non disponible sur cet appareil")
-                    .font(.nutriCaption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
     // MARK: - Stats
 
     private var statsSection: some View {
@@ -602,60 +363,6 @@ struct ProfileView: View {
             Text(valeur).foregroundStyle(.secondary)
         }
         .padding(.vertical, 2)
-    }
-
-    // MARK: - Compte
-
-    private var compteSection: some View {
-        profileSection(titre: "Compte", icone: "person.crop.circle", couleur: .gray) {
-            // Changer de profil
-            Button(action: onDeconnexion) {
-                Label("Changer de profil", systemImage: "person.2.fill")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.plain)
-            .padding(.vertical, 4)
-
-            Divider()
-
-            // Ajouter un profil
-            Button(action: onNouveauProfil) {
-                Label("Créer un nouveau profil", systemImage: "person.badge.plus")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.plain)
-            .padding(.vertical, 4)
-
-            Divider()
-
-            Button(role: .destructive, action: { showResetConfirm = true }) {
-                Label("Réinitialiser ce profil", systemImage: "person.crop.circle.badge.minus")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.plain)
-            .padding(.vertical, 4)
-            .confirmationDialog("Réinitialiser le profil ?", isPresented: $showResetConfirm, titleVisibility: .visible) {
-                Button("Réinitialiser", role: .destructive) { reinitialiserProfil() }
-                Button("Annuler", role: .cancel) {}
-            } message: {
-                Text("Votre profil sera supprimé et l'onboarding s'affichera à nouveau. Vos données alimentaires et corporelles seront conservées.")
-            }
-
-            Divider()
-
-            Button(role: .destructive, action: { showDeleteConfirm = true }) {
-                Label("Supprimer ce profil", systemImage: "trash.fill")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.plain)
-            .padding(.vertical, 4)
-            .confirmationDialog("Supprimer ce profil ?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
-                Button("Supprimer", role: .destructive) { supprimerCeProfil() }
-                Button("Annuler", role: .cancel) {}
-            } message: {
-                Text("Le profil de \(profilActif?.prenom ?? "cet utilisateur") sera définitivement supprimé. Les autres profils ne seront pas affectés.")
-            }
-        }
     }
 
     // MARK: - Composants
@@ -756,7 +463,6 @@ struct ProfileView: View {
         objectifProteines = p.objectifProteines
         objectifGlucides  = p.objectifGlucides
         objectifLipides   = p.objectifLipides
-        claudeAPIKey      = p.claudeAPIKey
         healthKitActif    = p.healthKitActif
 
         // v2
@@ -799,7 +505,6 @@ struct ProfileView: View {
         p.objectifProteines = objectifProteines
         p.objectifGlucides  = objectifGlucides
         p.objectifLipides   = objectifLipides
-        p.claudeAPIKey      = claudeAPIKey
         p.healthKitActif    = healthKitActif
 
         // v2

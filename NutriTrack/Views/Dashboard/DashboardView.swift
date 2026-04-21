@@ -6,19 +6,16 @@ struct DashboardView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.activeProfileID) private var activeProfileID
     @Query private var profiles: [UserProfile]
-    @Query(filter: #Predicate<UserPlan> { $0.estActif == true })
-    private var plansActifs: [UserPlan]
+    @Query(sort: \WellnessScore.date, order: .reverse) private var wellnessScores: [WellnessScore]
+    @Query(sort: \ProgressPhoto.date, order: .reverse) private var progressPhotos: [ProgressPhoto]
 
     @State private var viewModel = DashboardViewModel()
-    @State private var planViewModel = UserPlanViewModel()
     @State private var showAddFood = false
     @State private var showAddMetric = false
     @State private var healthKitService = HealthKitService()
-    @State private var claudeService = ClaudeAIService()
     @State private var chartProgress: Double = 0
 
     var profil: UserProfile? { profiles.first(where: { $0.profileID.uuidString == activeProfileID }) }
-    var planActif: UserPlan? { plansActifs.first(where: { $0.profileID == activeProfileID }) }
 
     var body: some View {
         ScrollView {
@@ -26,10 +23,8 @@ struct DashboardView: View {
                 enteteSection
                     .padding(.horizontal, Spacing.lg)
 
-                if let plan = planActif, let p = profil, Date() >= plan.prochainReevaluation {
-                    reevaluationBanner(plan: plan, profil: p)
-                        .padding(.horizontal, Spacing.lg)
-                }
+                planNutritionSection
+                    .padding(.horizontal, Spacing.lg)
 
                 #if os(macOS)
                 layoutMacOS
@@ -39,8 +34,8 @@ struct DashboardView: View {
             }
             .padding(.vertical, Spacing.md)
         }
-        .navigationTitle("Tableau de bord")
-        .background(Color.fondPrincipal)
+        .navigationTitle("")
+        .background(Color.fondPrincipal.opacity(0.70))
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: Spacing.sm) {
@@ -65,41 +60,78 @@ struct DashboardView: View {
         .sheet(isPresented: $showAddFood) {
             AddFoodView(mealType: "dejeuner", dateSelectionnee: Date())
         }
-        .sheet(isPresented: $showAddMetric, onDismiss: {
-            viewModel.charger(context: modelContext, profil: profil)
-        }) {
+        .nutriSheet(title: "Nouvelle mesure", size: .standard, isPresented: $showAddMetric) {
             AddMetricView()
+        }
+        .onChange(of: showAddMetric) { _, nouveau in
+            if !nouveau { viewModel.charger(context: modelContext, profil: profil) }
         }
         .onAppear {
             viewModel.charger(context: modelContext, profil: profil)
+            viewModel.chargerPlanNutrition(context: modelContext, profileID: activeProfileID)
             Task {
                 await viewModel.chargerDonneesHealthKit(service: healthKitService)
-                if let p = profil {
-                    await viewModel.chargerConseilIA(service: claudeService, profil: p, context: modelContext)
-                }
             }
         }
         .onChange(of: activeProfileID) {
             viewModel.charger(context: modelContext, profil: profil)
+            viewModel.chargerPlanNutrition(context: modelContext, profileID: activeProfileID)
         }
     }
 
-    // MARK: - En-tête
+    // MARK: - Plan nutrition (Sprint 2)
+
+    private var planNutritionSection: some View {
+        VStack(spacing: Spacing.sm) {
+            DayTypeSelector(
+                selected: currentDayType,
+                onSelect: { selectDayType($0) }
+            )
+            TargetsCard(
+                dayContext: viewModel.currentDayContext,
+                target: viewModel.currentTarget,
+                consumedKcal: viewModel.consumedKcal,
+                consumedProteinG: viewModel.consumedProteinG,
+                onSelectCTA: {}
+            )
+            QuickLogSection(
+                templates: viewModel.suggestedTemplates,
+                onLog: { tpl in logTemplate(tpl) }
+            )
+        }
+    }
+
+    private var currentDayType: DayType? {
+        guard let raw = viewModel.currentDayContext?.dayType else { return nil }
+        return DayType(rawValue: raw)
+    }
+
+    private func selectDayType(_ type: DayType) {
+        viewModel.selectDayType(type, context: modelContext, profileID: activeProfileID)
+        viewModel.chargerPlanNutrition(context: modelContext, profileID: activeProfileID)
+    }
+
+    private func logTemplate(_ template: MealTemplate) {
+        viewModel.logTemplate(template, context: modelContext, profileID: activeProfileID)
+    }
+
+    // MARK: - En-tête Lumina
 
     private var enteteSection: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(Date().formatLong)
-                    .font(.nutriCaption)
-                    .foregroundStyle(.secondary)
-                Text("Bonjour, \(profil?.prenomAffiche ?? "toi") 👋")
-                    .font(.nutriTitle)
-            }
-            Spacer()
-            Image(systemName: "leaf.fill")
-                .font(.largeTitle)
-                .foregroundStyle(Color.nutriGreen)
-        }
+        let prenom = profil?.prenomAffiche ?? "toi"
+        let semaineRestantes = profil.map {
+            NutritionCalculator.objectifsCaloriques(profil: $0).semainesRestantes
+        } ?? 0
+        let subtitle: String? = semaineRestantes > 0
+            ? "Il vous reste \(semaineRestantes) semaines pour atteindre votre objectif. Restez constant·e."
+            : nil
+
+        return LuminaSectionHeader(
+            eyebrow: "Acte I · Tableau de bord",
+            title: "Bonsoir,",
+            emphasis: "\(prenom).",
+            subtitle: subtitle
+        )
     }
 
     // MARK: - Layout macOS (2 colonnes)
@@ -110,8 +142,12 @@ struct DashboardView: View {
             VStack(spacing: Spacing.lg) {
                 anneauSection
                 statsGrid
+                HStack(alignment: .top, spacing: Spacing.md) {
+                    wellnessCard
+                    photoCard
+                }
             }
-            .frame(maxWidth: 360)
+            .frame(maxWidth: NutriLayout.dashboardLeftColumn)
 
             // Colonne droite
             VStack(spacing: Spacing.lg) {
@@ -121,7 +157,6 @@ struct DashboardView: View {
                 }
                 resumeMacros
                 graphique7Jours
-                conseilIA
             }
             .frame(maxWidth: .infinity)
         }
@@ -138,11 +173,94 @@ struct DashboardView: View {
             }
             anneauSection
             statsGrid
+            HStack(alignment: .top, spacing: Spacing.md) {
+                wellnessCard
+                photoCard
+            }
             resumeMacros
             graphique7Jours
-            conseilIA
         }
         .padding(.horizontal, Spacing.md)
+    }
+
+    // MARK: - Wellness & Photo cards (résumé dashboard)
+
+    private var wellnessProfilScores: [WellnessScore] {
+        wellnessScores.filter { $0.profileID == activeProfileID }
+    }
+
+    private var photosProfil: [ProgressPhoto] {
+        progressPhotos.filter { $0.profileID == activeProfileID }
+    }
+
+    private var wellnessCard: some View {
+        let cutoff = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+        let recent = wellnessProfilScores.filter { $0.date >= cutoff }
+        let moyenne: Double = recent.isEmpty
+            ? 0
+            : recent.map(\.scoreGlobal).reduce(0, +) / Double(recent.count)
+        let couleur: Color = moyenne >= 7 ? .nutriGreen : moyenne >= 5 ? .orange : .red
+
+        return GlassCard {
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                Label("Wellness", systemImage: "heart.fill")
+                    .font(.nutriHeadline)
+                    .foregroundStyle(.pink)
+                if recent.isEmpty {
+                    Text("—")
+                        .font(.nutriTitle2)
+                        .foregroundStyle(.secondary)
+                    Text("Aucun score")
+                        .font(.nutriCaption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    HStack(alignment: .firstTextBaseline, spacing: Spacing.xs) {
+                        Text(String(format: "%.1f", moyenne))
+                            .font(.nutriTitle2)
+                            .foregroundStyle(couleur)
+                        Text("/10")
+                            .font(.nutriCaption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text("Moy. 7 jours (\(recent.count))")
+                        .font(.nutriCaption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var photoCard: some View {
+        let derniere = photosProfil.first
+        return GlassCard {
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                Label("Photo", systemImage: "photo.stack.fill")
+                    .font(.nutriHeadline)
+                    .foregroundStyle(.purple)
+                if let photo = derniere {
+                    PhotoImage(data: photo.imageData)
+                        .frame(height: 80)
+                        .clipShape(RoundedRectangle(cornerRadius: Radius.sm))
+                    Text(photo.dateFormatted)
+                        .font(.nutriCaption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    RoundedRectangle(cornerRadius: Radius.sm)
+                        .fill(.secondary.opacity(0.1))
+                        .frame(height: 80)
+                        .overlay(
+                            Image(systemName: "camera")
+                                .font(.title2)
+                                .foregroundStyle(.secondary)
+                        )
+                    Text("Aucune photo")
+                        .font(.nutriCaption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     // MARK: - Bilan calorique (TDEE vs objectif transformation)
@@ -158,7 +276,7 @@ struct DashboardView: View {
             VStack(alignment: .leading, spacing: Spacing.sm) {
 
                 // Titre + badge approche
-                HStack(spacing: 6) {
+                HStack(spacing: Spacing.sm) {
                     Image(systemName: objectifs.iconeAjustement)
                         .foregroundStyle(objectifs.couleurAjustement)
                     Text("Objectif de transformation")
@@ -166,30 +284,30 @@ struct DashboardView: View {
                         .foregroundStyle(objectifs.couleurAjustement)
                     Spacer()
                     // Badge approche
-                    HStack(spacing: 4) {
+                    HStack(spacing: Spacing.xs) {
                         Text(approche.emoji)
                         Text(approche.label)
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.nutriCaption2)
                     }
                     .foregroundStyle(approche.couleur)
-                    .padding(.horizontal, 8).padding(.vertical, 3)
-                    .background(approche.couleur.opacity(0.12), in: Capsule())
+                    .padding(.horizontal, Spacing.sm).padding(.vertical, Spacing.xxs)
+                    .background { Capsule().fill(approche.couleur.opacity(0.12)) }
                     if objectifs.semainesRestantes > 0 {
                         Text("\(objectifs.semainesRestantes) sem.")
                             .font(.nutriCaption)
                             .foregroundStyle(.secondary)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(.secondary.opacity(0.12), in: Capsule())
+                            .padding(.horizontal, Spacing.sm)
+                            .padding(.vertical, Spacing.xxs)
+                            .background { Capsule().fill(Color.secondary.opacity(0.12)) }
                     }
                 }
 
                 // Ligne principale : cibles
                 HStack(spacing: Spacing.lg) {
                     // Calories entretien
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: Spacing.xxs) {
                         Text("Entretien")
-                            .font(.system(size: 10)).foregroundStyle(.secondary)
+                            .font(.nutriCaption2).foregroundStyle(.secondary)
                         Text("\(Int(objectifs.tdee.rounded())) kcal")
                             .font(.nutriHeadline).foregroundStyle(.secondary)
                     }
@@ -200,14 +318,14 @@ struct DashboardView: View {
                             .font(.caption2)
                             .foregroundStyle(objectifs.couleurAjustement)
                         Text(objectifs.ajustement == 0 ? "=" : "\(objectifs.ajustement > 0 ? "+" : "")\(Int(objectifs.ajustement.rounded())) kcal")
-                            .font(.system(size: 9))
+                            .font(.nutriCaption2)
                             .foregroundStyle(objectifs.couleurAjustement)
                     }
 
                     // Objectif transformation
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: Spacing.xxs) {
                         Text("Objectif")
-                            .font(.system(size: 10)).foregroundStyle(.secondary)
+                            .font(.nutriCaption2).foregroundStyle(.secondary)
                         Text("\(Int(objectifs.objectifTransformation.rounded())) kcal")
                             .font(.nutriHeadline)
                             .foregroundStyle(objectifs.couleurAjustement)
@@ -217,16 +335,16 @@ struct DashboardView: View {
 
                     // Kg estimés + rythme
                     if objectifs.kgEstimes > 0 {
-                        VStack(alignment: .trailing, spacing: 2) {
+                        VStack(alignment: .trailing, spacing: Spacing.xxs) {
                             Text("~\(String(format: "%.1f", objectifs.kgEstimes)) kg")
                                 .font(.nutriHeadline)
                                 .foregroundStyle(.primary)
                             Text(objectifs.typeTransformation)
-                                .font(.system(size: 10))
+                                .font(.nutriCaption2)
                                 .foregroundStyle(.secondary)
                             if objectifs.perteSemaineEstimee > 0 {
                                 Text("~\(String(format: "%.2f", objectifs.perteSemaineEstimee)) kg/sem.")
-                                    .font(.system(size: 10, weight: .medium))
+                                    .font(.nutriCaption2)
                                     .foregroundStyle(approche.couleur)
                             }
                         }
@@ -234,14 +352,14 @@ struct DashboardView: View {
                 }
 
                 // Barre de progression du jour
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: Spacing.xs) {
                     HStack {
                         Text("Aujourd'hui : \(Int(consomme.rounded())) kcal")
-                            .font(.system(size: 11))
+                            .font(.nutriCaption)
                             .foregroundStyle(.secondary)
                         Spacer()
                         Text("\(Int((progression * 100).rounded()))%")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.nutriCaption)
                             .foregroundStyle(objectifs.couleurAjustement)
                     }
                     GeometryReader { geo in
@@ -285,7 +403,7 @@ struct DashboardView: View {
                                     .fill(jalon.couleur.opacity(0.15))
                                     .frame(width: 28, height: 28)
                                 Image(systemName: jalon.icone)
-                                    .font(.system(size: 11))
+                                    .font(.nutriCaption)
                                     .foregroundStyle(jalon.couleur)
                             }
                             if idx < objectifs.jalons.count - 1 {
@@ -295,19 +413,19 @@ struct DashboardView: View {
                             }
                         }
 
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: Spacing.xxs) {
                             HStack {
                                 Text(jalon.titre)
-                                    .font(.system(size: 12, weight: .semibold))
+                                    .font(.nutriCaption)
                                     .foregroundStyle(jalon.couleur)
                                 Spacer()
                                 Text(fmt.string(from: jalon.dateEstimee))
-                                    .font(.system(size: 11))
+                                    .font(.nutriCaption)
                                     .foregroundStyle(.secondary)
                                     .monospacedDigit()
                             }
                             Text(jalon.detail)
-                                .font(.system(size: 10))
+                                .font(.nutriCaption2)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -335,7 +453,7 @@ struct DashboardView: View {
                         objectifLipides:    bilan.lipidesObjectif
                     )
                     .frame(height: 280)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, Spacing.sm)
 
                     MacroRingLegende(
                         proteines: bilan.proteinesConsommees,
@@ -345,7 +463,7 @@ struct DashboardView: View {
                 } else {
                     VStack(spacing: Spacing.sm) {
                         Image(systemName: "fork.knife.circle")
-                            .font(.system(size: 48))
+                            .font(.system(size: 48)) // icône hero
                             .foregroundStyle(Color.nutriGreen.opacity(0.5))
                         Text("Aucun repas enregistré aujourd'hui")
                             .font(.nutriBody)
@@ -463,13 +581,13 @@ struct DashboardView: View {
                 .chartXAxis {
                     AxisMarks(values: .stride(by: .day)) { _ in
                         AxisValueLabel(format: .dateTime.weekday(.abbreviated), centered: true)
-                            .font(.system(size: 11))
+                            .font(.nutriCaption)
                     }
                 }
                 .chartYAxis {
                     AxisMarks(position: .trailing) { _ in
                         AxisValueLabel()
-                            .font(.system(size: 11))
+                            .font(.nutriCaption)
                     }
                 }
                 .onAppear {
@@ -484,97 +602,6 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - Banner réévaluation
-
-    private func reevaluationBanner(plan: UserPlan, profil: UserProfile) -> some View {
-        GlassCard {
-            HStack(spacing: Spacing.md) {
-                Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
-                    .font(.title2)
-                    .foregroundStyle(.orange)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Réévaluation du plan recommandée")
-                        .font(.nutriHeadline)
-                    Text("Votre programme a \(Calendar.current.dateComponents([.day], from: plan.prochainReevaluation, to: Date()).day ?? 0) jour(s) de retard.")
-                        .font(.nutriCaption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Button {
-                    Task { await planViewModel.reevaluerPlan(profil: profil, context: modelContext) }
-                } label: {
-                    if planViewModel.isGenerating {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Text("Réévaluer")
-                            .font(.nutriHeadline)
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, Spacing.md)
-                            .padding(.vertical, Spacing.xs)
-                            .background(.orange, in: RoundedRectangle(cornerRadius: Radius.sm))
-                    }
-                }
-                .buttonStyle(.plain)
-                .disabled(planViewModel.isGenerating)
-            }
-        }
-        .overlay(
-            RoundedRectangle(cornerRadius: Radius.md)
-                .strokeBorder(.orange.opacity(0.4), lineWidth: 1)
-        )
-    }
-
-    // MARK: - Conseil IA
-
-    @ViewBuilder
-    private var conseilIA: some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: Spacing.sm) {
-                HStack {
-                    Label("Conseil du jour", systemImage: "brain.head.profile")
-                        .font(.nutriHeadline)
-                        .foregroundStyle(.cyan)
-                    Spacer()
-                    if let p = profil, p.aUneCleAPI {
-                        Button(action: {
-                            Task { await viewModel.rafraichirConseilIA(service: claudeService, profil: p, context: modelContext) }
-                        }) {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.caption)
-                                .foregroundStyle(.cyan.opacity(0.7))
-                        }
-                        .buttonStyle(.plain)
-                        .help("Obtenir un nouveau conseil (1 appel API)")
-                    }
-                }
-
-                if viewModel.isLoadingConseil {
-                    HStack(spacing: Spacing.sm) {
-                        ProgressView().controlSize(.small)
-                        Text("NutriCoach réfléchit…")
-                            .font(.nutriCaption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.top, 4)
-                } else if viewModel.conseilIA.isEmpty {
-                    Text(profil?.aUneCleAPI == true
-                         ? "Chargement du conseil…"
-                         : "Ajoutez votre clé API Claude dans le profil pour recevoir des conseils personnalisés.")
-                        .font(.nutriBody)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    Text(viewModel.conseilIA)
-                        .font(.nutriBody)
-                        .foregroundStyle(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-    }
 }
 
 #Preview {
@@ -582,7 +609,9 @@ struct DashboardView: View {
         DashboardView()
             .modelContainer(for: [
                 FoodItem.self, FoodEntry.self, BodyMetric.self,
-                ActivityEntry.self, MealPlan.self, UserProfile.self
+                ActivityEntry.self, UserProfile.self,
+                MacroTarget.self, DayContext.self,
+                MealTemplate.self, MealTemplateItem.self
             ], inMemory: true)
     }
     .frame(width: 900, height: 700)

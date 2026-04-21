@@ -203,7 +203,7 @@ struct SilhouettePicker: View {
                         )
 
                         Text(type.label(sexe: sexe))
-                            .font(.system(size: 9, weight: selected ? .semibold : .regular, design: .rounded))
+                            .font(.system(size: 9, weight: selected ? .semibold : .regular, design: .rounded)) // micro-label silhouette — <11pt donc hors tokens
                             .foregroundStyle(selected ? Color.nutriGreen : Color.secondary)
                             .multilineTextAlignment(.center)
                             .lineLimit(2)

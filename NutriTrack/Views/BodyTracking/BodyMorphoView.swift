@@ -72,10 +72,10 @@ struct BodyMorphoView: View {
         let score = analyse.scoreGlobal
         return VStack(spacing: 1) {
             Text("\(score)")
-                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .font(.nutriTitle2)
                 .foregroundStyle(analyse.couleurScore)
             Text(analyse.labelScore)
-                .font(.system(size: 9, weight: .medium))
+                .font(.system(size: 9, weight: .medium)) // micro-label data viz <11pt
                 .foregroundStyle(analyse.couleurScore)
         }
         .padding(.horizontal, 10)
@@ -96,22 +96,23 @@ struct BodyMorphoView: View {
     private func zoneRow(_ zone: AnalyseZone) -> some View {
         HStack(spacing: 6) {
             Image(systemName: zone.statut.icone)
-                .font(.system(size: 9))
+                .font(.system(size: 9)) // micro-icone data viz <11pt
                 .foregroundStyle(zone.statut.couleur)
                 .frame(width: 12)
 
             Text(zone.zone.rawValue)
-                .font(.system(size: 11))
+                .font(.nutriCaption2)
                 .foregroundStyle(.primary)
                 .frame(width: 85, alignment: .leading)
 
             Text(zone.valeurAffichee)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.nutriCaption2)
+                .fontWeight(.semibold)
                 .foregroundStyle(zone.statut.couleur)
                 .frame(width: 48, alignment: .trailing)
 
             Text(zone.conseil)
-                .font(.system(size: 9))
+                .font(.system(size: 9)) // micro-label data viz <11pt
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
@@ -125,7 +126,8 @@ struct BodyMorphoView: View {
                     .font(.nutriCaption).foregroundStyle(.secondary)
                 Spacer()
                 Text("\(score) / 100")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.nutriCaption2)
+                    .fontWeight(.semibold)
                     .foregroundStyle(analyse.couleurScore)
             }
             GeometryReader { geo in
@@ -153,7 +155,7 @@ struct BodyMorphoView: View {
                 HStack(spacing: 3) {
                     Circle().fill(s.couleur).frame(width: 7, height: 7)
                     Text(s.label)
-                        .font(.system(size: 9))
+                        .font(.system(size: 9)) // micro-label légende <11pt
                         .foregroundStyle(.secondary)
                 }
             }

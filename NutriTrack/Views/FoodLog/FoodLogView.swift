@@ -5,31 +5,31 @@ struct FoodLogView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.activeProfileID) private var activeProfileID
     @Query private var profiles: [UserProfile]
-    @Query(filter: #Predicate<UserPlan> { $0.estActif == true },
-           sort: \UserPlan.dateCreation, order: .reverse) private var tousPlans: [UserPlan]
 
     @State private var viewModel = FoodLogViewModel()
-    @State private var showPlanNutritionComplet = false
-
-    private var planActif: UserPlan? { tousPlans.first(where: { $0.profileID == activeProfileID }) }
 
     var profil: UserProfile? { profiles.first(where: { $0.profileID.uuidString == activeProfileID }) }
 
     var body: some View {
         ScrollView {
             VStack(spacing: Spacing.md) {
+                LuminaSectionHeader(
+                    eyebrow: "Acte II · Journal",
+                    title: "Nutrition",
+                    emphasis: "du jour."
+                )
+                .padding(.horizontal, Spacing.md)
+                .padding(.top, Spacing.sm)
+
                 dateNavigateur
-                if let p = profil { planNutritionAdaptatif(profil: p) }
+                if let p = profil, p.aUnObjectifSilhouette { planNutritionSection(profil: p) }
                 totauxJour
                 sections
             }
             .padding(Spacing.md)
         }
-        .navigationTitle("Nutrition")
-        .sheet(isPresented: $showPlanNutritionComplet) {
-            if let plan = planActif { PlanNutritionCompletSheet(plan: plan, profil: profil) }
-        }
-        .background(Color.fondPrincipal)
+        .navigationTitle("")
+        .background(Color.fondPrincipal.opacity(0.70))
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: { viewModel.showAddFood = true }) {
@@ -54,60 +54,9 @@ struct FoodLogView: View {
         }
     }
 
-    // MARK: - Plan nutritionnel adaptatif (4 états)
+    // MARK: - Plan nutritionnel (affiché si objectif silhouette défini)
 
-    @ViewBuilder
-    private func planNutritionAdaptatif(profil: UserProfile) -> some View {
-        switch profil.etatPlan(planActif: planActif) {
-        case .planActif(let plan):
-            planNutritionSection(plan: plan, profil: profil)
-        case .aucunPlan:
-            etatPlanCard(
-                icone: "fork.knife.circle",
-                couleur: .orange,
-                titre: "Aucun plan nutritionnel",
-                message: "Votre profil est configuré. Générez votre plan depuis l'onglet Entraînement."
-            )
-        case .cleAPIManquante:
-            etatPlanCard(
-                icone: "key.fill",
-                couleur: .orange,
-                titre: "Clé API Claude manquante",
-                message: "Ajoutez votre clé Claude dans Profil → Coach IA pour générer votre plan nutritionnel personnalisé."
-            )
-        case .profilIncomplet:
-            etatPlanCard(
-                icone: "person.crop.circle.badge.exclamationmark",
-                couleur: .secondary,
-                titre: "Complétez votre profil",
-                message: "Définissez votre silhouette objectif et une date cible pour obtenir un plan nutritionnel adapté."
-            )
-        }
-    }
-
-    private func etatPlanCard(icone: String, couleur: Color, titre: String, message: String) -> some View {
-        GlassCard {
-            HStack(spacing: Spacing.md) {
-                Image(systemName: icone)
-                    .font(.title2)
-                    .foregroundStyle(couleur.opacity(0.7))
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(titre)
-                        .font(.nutriHeadline)
-                    Text(message)
-                        .font(.nutriCaption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-    }
-
-    // MARK: - Plan nutritionnel (affiché quand plan actif)
-
-    private func planNutritionSection(plan: UserPlan, profil: UserProfile) -> some View {
-        // Toujours calculer dynamiquement — les valeurs stockées dans le plan IA sont obsolètes
-        // si l'approche de transformation a changé depuis la génération du plan.
+    private func planNutritionSection(profil: UserProfile) -> some View {
         let obj  = NutritionCalculator.objectifsCaloriques(profil: profil)
         let mac  = NutritionCalculator.macrosCiblesTransformation(
             calories:   obj.objectifTransformation,
@@ -123,20 +72,14 @@ struct FoodLogView: View {
                     Label("Mon plan nutritionnel", systemImage: "fork.knife.circle.fill")
                         .font(.nutriHeadline).foregroundStyle(.orange)
                     Spacer()
-                    // Badge approche
-                    HStack(spacing: 4) {
+                    HStack(spacing: Spacing.xs) {
                         Text(approche.emoji)
                         Text(approche.label)
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(.nutriCaption2)
                     }
                     .foregroundStyle(approche.couleur)
-                    .padding(.horizontal, 7).padding(.vertical, 3)
-                    .background(approche.couleur.opacity(0.12), in: Capsule())
-
-                    Button(action: { showPlanNutritionComplet = true }) {
-                        Text("Voir tout").font(.nutriCaption).foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
+                    .padding(.horizontal, Spacing.sm).padding(.vertical, Spacing.xxs)
+                    .background { Capsule().fill(approche.couleur.opacity(0.12)) }
                 }
 
                 // Macros calculées dynamiquement
@@ -148,49 +91,34 @@ struct FoodLogView: View {
                 }
 
                 // Ligne contexte TDEE / ajustement
-                if profil.aUnObjectifSilhouette && obj.ajustement != 0 {
+                if obj.ajustement != 0 {
                     Divider()
-                    HStack(spacing: 6) {
+                    HStack(spacing: Spacing.sm) {
                         Image(systemName: obj.iconeAjustement)
                             .font(.caption2).foregroundStyle(obj.couleurAjustement)
                         Text("Entretien : \(Int(obj.tdee.rounded())) kcal")
-                            .font(.system(size: 10)).foregroundStyle(.secondary)
+                            .font(.nutriCaption2).foregroundStyle(.secondary)
                         Text("·").foregroundStyle(.tertiary)
                         Text("\(obj.typeTransformation.capitalized) : \(obj.ajustement > 0 ? "+" : "")\(Int(obj.ajustement.rounded())) kcal/j")
-                            .font(.system(size: 10, weight: .medium)).foregroundStyle(obj.couleurAjustement)
+                            .font(.nutriCaption2).foregroundStyle(obj.couleurAjustement)
                         if obj.semainesRestantes > 0 {
                             Spacer()
                             Text("\(obj.semainesRestantes) sem. restantes")
-                                .font(.system(size: 10)).foregroundStyle(.secondary)
+                                .font(.nutriCaption2).foregroundStyle(.secondary)
                         }
                     }
-                }
-
-                // Premier conseil IA (qualitatif — reste du plan)
-                if let conseil = plan.planNutrition?.recommandations.first {
-                    Divider()
-                    HStack(spacing: 6) {
-                        Image(systemName: "lightbulb.fill").font(.caption).foregroundStyle(.orange)
-                        Text(conseil).font(.nutriCaption).foregroundStyle(.secondary).lineLimit(2)
-                    }
-                }
-
-                let joursRestants = max(0, Calendar.current.dateComponents([.day], from: Date(), to: plan.prochainReevaluation).day ?? 0)
-                if joursRestants > 0 {
-                    Text("Réévaluation dans \(joursRestants) jour(s)")
-                        .font(.system(size: 10)).foregroundStyle(.secondary)
                 }
             }
         }
     }
 
     private func macroTarget(label: String, valeur: String, unite: String, couleur: Color) -> some View {
-        VStack(spacing: 2) {
-            HStack(alignment: .lastTextBaseline, spacing: 2) {
-                Text(valeur).font(.nutriHeadline).foregroundStyle(couleur)
-                Text(unite).font(.system(size: 9)).foregroundStyle(.secondary)
+        VStack(spacing: Spacing.xxs) {
+            HStack(alignment: .lastTextBaseline, spacing: Spacing.xxs) {
+                Text(valeur).font(Font.nutriHeadline).foregroundStyle(couleur)
+                Text(unite).font(Font.nutriCaption2).foregroundStyle(Color.luminaInkMuted)
             }
-            Text(label).font(.system(size: 9)).foregroundStyle(.secondary)
+            Text(label).font(Font.nutriCaption2).foregroundStyle(Color.luminaInkMuted)
         }
         .frame(maxWidth: .infinity)
     }
@@ -212,7 +140,7 @@ struct FoodLogView: View {
                 viewModel.dateSelectionnee = Date()
                 viewModel.charger(context: modelContext, profileID: activeProfileID)
             }) {
-                VStack(spacing: 2) {
+                VStack(spacing: Spacing.xxs) {
                     Text(viewModel.dateSelectionnee.formatLong)
                         .font(.nutriHeadline)
                     if viewModel.estAujourdhui {
@@ -294,7 +222,7 @@ struct FoodLogView: View {
     }
 
     private func macroLabel(_ label: String, valeur: Double) -> some View {
-        VStack(spacing: 2) {
+        VStack(spacing: Spacing.xxs) {
             Text(valeur.arrondi(0))
                 .font(.nutriTitle2)
                 .monospacedDigit()

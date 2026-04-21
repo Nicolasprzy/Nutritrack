@@ -54,19 +54,20 @@ struct FoodDetailView: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Annuler") { dismiss() }
+                    NutriButton("Annuler", style: .secondary, size: .small) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Ajouter") {
+                    NutriButton("Ajouter", icon: "plus.circle.fill", style: .primary, size: .small) {
                         ajouterAuJournal()
                     }
-                    .bold()
-                    .foregroundStyle(Color.nutriGreen)
                 }
             }
         }
         #if os(macOS)
-        .frame(minWidth: 460, idealWidth: 500, maxWidth: 700, minHeight: 520)
+        .frame(minWidth: NutriLayout.sheetStandardWidth,
+               idealWidth: NutriLayout.sheetStandardWidth,
+               maxWidth: NutriLayout.sheetLargeWidth,
+               minHeight: NutriLayout.sheetStandardHeight)
         #endif
     }
 
@@ -86,24 +87,13 @@ struct FoodDetailView: View {
                     // Badge repas
                     Text(MealType(rawValue: mealType)?.label ?? mealType)
                         .font(.nutriCaption)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
+                        .padding(.horizontal, Spacing.sm)
+                        .padding(.vertical, Spacing.xs)
                         .background(.ultraThinMaterial, in: Capsule())
 
-                    // Sélecteur de date — modifiable
-                    HStack(spacing: 4) {
-                        Image(systemName: "calendar")
-                            .font(.caption2)
-                            .foregroundStyle(Color.nutriGreen)
-                        DatePicker("", selection: $dateAjout, displayedComponents: .date)
-                            .labelsHidden()
-                            .datePickerStyle(.compact)
-                            .tint(Color.nutriGreen)
-                            .font(.nutriCaption)
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.nutriGreen.opacity(0.08), in: Capsule())
+                    // Sélecteur de date — via NutriDatePicker inline compact
+                    NutriDatePicker(title: "", date: $dateAjout, style: .inline)
+                        .frame(maxWidth: 220)
                 }
             }
         }
@@ -114,45 +104,23 @@ struct FoodDetailView: View {
     private var quantiteSection: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: Spacing.sm) {
-                Label("Quantité", systemImage: "scalemass.fill")
-                    .font(.nutriHeadline)
+                NutriSectionHeader("Quantité", icon: "scalemass.fill")
 
-                HStack(spacing: Spacing.md) {
-                    // Stepper
-                    HStack {
-                        Button(action: { quantite = max(1, quantite - 10) }) {
-                            Image(systemName: "minus.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
+                NutriStepper(
+                    title: "",
+                    value: $quantite,
+                    step: 10,
+                    range: 1...500,
+                    suffix: uniteSelectionnee,
+                    format: "%.0f"
+                )
 
-                        TextField("Quantité", value: $quantite, format: .number)
-                            .font(.nutriTitle2)
-                            .multilineTextAlignment(.center)
-                            .frame(width: 80)
-                            #if os(iOS)
-                            .keyboardType(.decimalPad)
-                            #endif
+                // Unité — NutriPicker
+                NutriPicker("Unité", selection: $uniteSelectionnee, options: unites.map {
+                    NutriPickerOption($0, label: $0)
+                })
 
-                        Button(action: { quantite += 10 }) {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(Color.nutriGreen)
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    // Unité
-                    Picker("Unité", selection: $uniteSelectionnee) {
-                        ForEach(unites, id: \.self) { unite in
-                            Text(unite).tag(unite)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                }
-
-                // Slider
+                // Slider fin
                 Slider(value: $quantite, in: 1...500, step: 5)
                     .tint(.nutriGreen)
             }
@@ -180,7 +148,7 @@ struct FoodDetailView: View {
     }
 
     private func nutriChiffre(valeur: String, label: String, couleur: Color) -> some View {
-        VStack(spacing: 2) {
+        VStack(spacing: Spacing.xxs) {
             Text(valeur)
                 .font(.nutriTitle2)
                 .foregroundStyle(couleur)

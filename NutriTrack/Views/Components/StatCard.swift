@@ -1,5 +1,6 @@
 import SwiftUI
 
+/// Carte statistique Lumina — point pulsant + valeur display italic serif + unité mono
 struct StatCard: View {
     let titre: String
     let valeur: String
@@ -8,33 +9,54 @@ struct StatCard: View {
     let couleur: Color
     var tendance: String? = nil
 
+    @State private var pulsing = false
+
     var body: some View {
-        GlassCard(padding: Spacing.lg) {
+        GlassCard(padding: Spacing.md) {
             VStack(alignment: .leading, spacing: 10) {
-                // Icône + titre
+
+                // ── Étiquette avec point pulsant ─────────────────────────────
                 HStack(spacing: 6) {
-                    Image(systemName: icone)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(couleur)
-                    Text(titre)
-                        .font(.system(size: 12, design: .rounded))
-                        .foregroundStyle(.secondary)
+                    Circle()
+                        .fill(couleur)
+                        .frame(width: 5, height: 5)
+                        .shadow(color: couleur.opacity(0.8), radius: pulsing ? 4 : 2)
+                        .scaleEffect(pulsing ? 1.35 : 1.0)
+                        .animation(
+                            .easeInOut(duration: 1.6).repeatForever(autoreverses: true),
+                            value: pulsing
+                        )
+                        .onAppear { pulsing = true }
+
+                    Text(titre.uppercased())
+                        .font(.luminaCardLabel)
+                        .tracking(2.5)
+                        .foregroundStyle(Color.luminaInkMuted)
                         .lineLimit(1)
+
                     Spacer()
                 }
 
-                // Valeur + unité sur la même ligne
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                // ── Valeur display + unité ────────────────────────────────────
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
                     Text(valeur)
-                        .font(.system(.title2, design: .rounded, weight: .bold))
-                        .foregroundStyle(.primary)
+                        .font(.luminaDisplay(32, weight: .thin))
+                        .foregroundStyle(Color.luminaInkPrimary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
 
                     Text(unite)
-                        .font(.system(size: 12, design: .rounded))
-                        .foregroundStyle(.secondary)
+                        .font(.luminaMono(11))
+                        .foregroundStyle(Color.luminaInkMuted)
                         .lineLimit(1)
+                }
+
+                // ── Tendance (optionnelle) ────────────────────────────────────
+                if let tendance {
+                    Text(tendance)
+                        .font(.luminaMono(9))
+                        .tracking(1)
+                        .foregroundStyle(couleur.opacity(0.8))
                 }
             }
         }
@@ -42,6 +64,7 @@ struct StatCard: View {
     }
 }
 
+/// Grande carte stat Lumina — version étendue avec barre de progression
 struct StatCardLarge: View {
     let titre: String
     let valeur: String
@@ -50,35 +73,81 @@ struct StatCardLarge: View {
     let couleur: Color
     var progressionValue: Double? = nil
 
+    @State private var pulsing = false
+
     var body: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: Spacing.sm) {
-                Label(titre, systemImage: icone)
-                    .font(.nutriHeadline)
-                    .foregroundStyle(couleur)
+
+                // Eyebrow
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(couleur)
+                        .frame(width: 5, height: 5)
+                        .shadow(color: couleur.opacity(0.8), radius: pulsing ? 4 : 2)
+                        .scaleEffect(pulsing ? 1.3 : 1.0)
+                        .animation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true), value: pulsing)
+                        .onAppear { pulsing = true }
+
+                    Text(titre.uppercased())
+                        .font(.luminaCardLabel)
+                        .tracking(2.5)
+                        .foregroundStyle(Color.luminaInkMuted)
+                }
+
+                // Valeur
                 Text(valeur)
-                    .font(.nutriLargeTitle)
-                    .foregroundStyle(.primary)
+                    .font(.luminaDisplay(44, weight: .thin))
+                    .foregroundStyle(Color.luminaInkPrimary)
                     .minimumScaleFactor(0.7)
                     .lineLimit(1)
+
+                // Barre progression
                 if let progression = progressionValue {
-                    ProgressView(value: progression).tint(couleur)
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Color.luminaInkFaint)
+                                .frame(height: 2)
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [couleur, couleur.opacity(0.6)],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .frame(width: geo.size.width * min(1, progression), height: 2)
+                        }
+                    }
+                    .frame(height: 2)
                 }
+
+                // Sous-titre
                 Text(sousTitre)
-                    .font(.nutriCaption)
-                    .foregroundStyle(.secondary)
+                    .font(.luminaMono(10))
+                    .tracking(1)
+                    .foregroundStyle(Color.luminaInkMuted)
             }
         }
     }
 }
 
 #Preview {
-    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-        StatCard(titre: "Restantes", valeur: "2332", unite: "kcal", icone: "flame.fill", couleur: .orange)
-        StatCard(titre: "Brûlées", valeur: "—", unite: "kcal", icone: "bolt.fill", couleur: .red)
-        StatCard(titre: "Pas", valeur: "8 234", unite: "pas", icone: "figure.walk", couleur: .nutriGreen)
-        StatCard(titre: "Eau", valeur: "—", unite: "L", icone: "drop.fill", couleur: .blue)
+    ZStack {
+        AmbientBackground()
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+            StatCard(titre: "Restantes", valeur: "2 332", unite: "kcal",
+                     icone: "flame.fill", couleur: Color.luminaEmber)
+            StatCard(titre: "Brûlées", valeur: "—", unite: "kcal",
+                     icone: "bolt.fill", couleur: .orange)
+            StatCard(titre: "Poids", valeur: "81.5", unite: "kg",
+                     icone: "scalemass.fill", couleur: .blue)
+            StatCard(titre: "Masse grasse", valeur: "14.2", unite: "%",
+                     icone: "drop.fill", couleur: Color.nutriGreen,
+                     tendance: "↓ –0.3% cette semaine")
+        }
+        .padding(32)
     }
-    .padding()
-    .frame(width: 400)
+    .frame(width: 480, height: 380)
 }

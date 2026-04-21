@@ -7,16 +7,11 @@ struct ActivityView: View {
     @Environment(\.activeProfileID) private var activeProfileID
     @Query(sort: \ActivityEntry.date, order: .reverse) private var toutesActivites: [ActivityEntry]
     @Query private var profiles: [UserProfile]
-    @Query(filter: #Predicate<UserPlan> { $0.estActif == true },
-           sort: \UserPlan.dateCreation, order: .reverse) private var tousPlans: [UserPlan]
 
     @State private var showAddActivity = false
-    @State private var viewModel = UserPlanViewModel()
-    @State private var showProgrammeComplet = false
     @State private var chartProgress: Double = 0
 
     private var profil: UserProfile? { profiles.first(where: { $0.profileID.uuidString == activeProfileID }) }
-    private var planActif: UserPlan? { tousPlans.first(where: { $0.profileID == activeProfileID }) }
 
     // Filtrage des activités par profil actif
     private var activites: [ActivityEntry] {
@@ -49,29 +44,13 @@ struct ActivityView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: Spacing.lg) {
-                // ── Programme du jour — état adaptatif ──
-                if let p = profil {
-                    switch p.etatPlan(planActif: planActif) {
-                    case .planActif(let plan):
-                        programmeDuJour(plan: plan)
-                    case .aucunPlan:
-                        genererPlanBanner(profil: p)
-                    case .cleAPIManquante:
-                        etatPlanCard(
-                            icone: "key.fill", couleur: .orange,
-                            titre: "Clé API Claude manquante",
-                            message: "Ajoutez votre clé Claude dans Profil → Coach IA pour générer votre programme personnalisé.",
-                            actionLabel: nil, action: nil
-                        )
-                    case .profilIncomplet:
-                        etatPlanCard(
-                            icone: "person.crop.circle.badge.exclamationmark", couleur: .secondary,
-                            titre: "Profil incomplet",
-                            message: "Définissez votre silhouette objectif et une date cible dans votre profil pour générer un programme.",
-                            actionLabel: nil, action: nil
-                        )
-                    }
-                }
+                LuminaSectionHeader(
+                    eyebrow: "Acte V · Mouvement",
+                    title: "Entraînement",
+                    emphasis: "& activité."
+                )
+                .padding(.horizontal, Spacing.md)
+                .padding(.top, Spacing.sm)
 
                 resumeAujourdhui
                 if let p = profil { approcheEntrainementCard(profil: p) }
@@ -80,8 +59,8 @@ struct ActivityView: View {
             }
             .padding(Spacing.md)
         }
-        .navigationTitle("Entraînement")
-        .background(Color.fondPrincipal)
+        .navigationTitle("")
+        .background(Color.fondPrincipal.opacity(0.70))
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: { showAddActivity = true }) {
@@ -91,152 +70,8 @@ struct ActivityView: View {
                 .accessibilityLabel("Ajouter une activité")
             }
         }
-        .sheet(isPresented: $showAddActivity) {
+        .nutriSheet(title: "Ajouter une activité", size: .standard, isPresented: $showAddActivity) {
             AddActivityView()
-        }
-        .sheet(isPresented: $showProgrammeComplet) {
-            if let plan = planActif { ProgrammeCompletSheet(plan: plan) }
-        }
-    }
-
-    // MARK: - Programme du jour
-
-    private func programmeDuJour(plan: UserPlan) -> some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: Spacing.sm) {
-                HStack {
-                    Label("Mon programme", systemImage: "dumbbell.fill")
-                        .font(.nutriHeadline).foregroundStyle(.red)
-                    Spacer()
-                    Button(action: { showProgrammeComplet = true }) {
-                        Text("Voir tout")
-                            .font(.nutriCaption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                if let seance = seanceDuJour(from: plan) {
-                    if seance.estJourRepos {
-                        HStack(spacing: Spacing.sm) {
-                            Image(systemName: "moon.fill").foregroundStyle(.indigo)
-                            Text("Repos aujourd'hui — récupération active conseillée")
-                                .font(.nutriCaption).foregroundStyle(.secondary)
-                        }
-                    } else {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(seance.jourLabel)
-                                    .font(.nutriCaption).foregroundStyle(.secondary)
-                                HStack(spacing: 6) {
-                                    Image(systemName: seance.iconeSeance).foregroundStyle(.red)
-                                    Text(seance.typeSeance).font(.nutriHeadline)
-                                    Text("· \(seance.dureeMinutes) min")
-                                        .font(.nutriCaption).foregroundStyle(.secondary)
-                                }
-                            }
-                            Spacer()
-                            if seance.seanceFaite {
-                                Label("Faite", systemImage: "checkmark.circle.fill")
-                                    .font(.nutriCaption).foregroundStyle(Color.nutriGreen)
-                            } else {
-                                Button(action: {
-                                    viewModel.marquerSeanceFaite(plan: plan, jourId: seance.id, profileID: activeProfileID, context: modelContext)
-                                }) {
-                                    Text("Marquer faite")
-                                        .font(.nutriCaption)
-                                        .padding(.horizontal, 10).padding(.vertical, 5)
-                                        .background(Color.red.opacity(0.15), in: Capsule())
-                                        .foregroundStyle(.red)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-
-                        if !seance.exercices.isEmpty {
-                            Divider()
-                            ForEach(seance.exercices.prefix(3)) { ex in
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 1) {
-                                        Text(ex.nom).font(.nutriCaption)
-                                        Text(ex.musclesCibles.prefix(2).joined(separator: ", "))
-                                            .font(.system(size: 10)).foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                    Text("\(ex.series)× \(ex.repetitions)")
-                                        .font(.nutriCaption).foregroundStyle(.secondary)
-                                }
-                            }
-                            if seance.exercices.count > 3 {
-                                Text("+ \(seance.exercices.count - 3) exercice(s)…")
-                                    .font(.system(size: 10)).foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                } else {
-                    Text("Aucune séance programmée aujourd'hui.")
-                        .font(.nutriCaption).foregroundStyle(.secondary)
-                }
-
-                // Réévaluation
-                if let p = profil, !p.claudeAPIKey.isEmpty {
-                    let jours = joursAvantReevaluation(plan: plan)
-                    if jours == 0 {
-                        Button(action: {
-                            if let p = profil {
-                                Task { await viewModel.reevaluerPlan(profil: p, context: modelContext) }
-                            }
-                        }) {
-                            Label("Réévaluer mon plan", systemImage: "arrow.clockwise")
-                                .font(.nutriCaption)
-                                .foregroundStyle(.orange)
-                        }
-                        .buttonStyle(.plain)
-                    } else {
-                        Text("Réévaluation dans \(jours) jour(s)")
-                            .font(.system(size: 10)).foregroundStyle(.secondary)
-                    }
-                }
-            }
-        }
-    }
-
-    private func genererPlanBanner(profil: UserProfile) -> some View {
-        GlassCard {
-            VStack(spacing: Spacing.sm) {
-                Image(systemName: "dumbbell.fill")
-                    .font(.title2).foregroundStyle(.red.opacity(0.7))
-                Text("Aucun programme actif")
-                    .font(.nutriHeadline)
-                Text("Votre profil est prêt. Générez votre programme d'entraînement personnalisé par IA.")
-                    .font(.nutriCaption).foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-
-                Button(action: {
-                    Task { await viewModel.genererPlan(profil: profil, context: modelContext) }
-                }) {
-                    if viewModel.isGenerating {
-                        HStack(spacing: 6) {
-                            ProgressView().controlSize(.small)
-                            Text("Génération en cours…").font(.nutriCaption)
-                        }
-                    } else {
-                        Label("Générer mon programme IA", systemImage: "wand.and.stars")
-                            .font(.nutriCaption)
-                            .padding(.horizontal, 14).padding(.vertical, 7)
-                            .background(Color.red.opacity(0.15), in: Capsule())
-                            .foregroundStyle(.red)
-                    }
-                }
-                .buttonStyle(.plain)
-                .disabled(viewModel.isGenerating)
-
-                if let err = viewModel.errorMessage {
-                    Text(err).font(.nutriCaption).foregroundStyle(.red)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, Spacing.xs)
         }
     }
 
@@ -263,10 +98,11 @@ struct ActivityView: View {
                             Image(systemName: "calendar.badge.checkmark")
                                 .font(.caption2).foregroundStyle(approche.couleur)
                             Text(approche.seancesConseillees)
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(.nutriCaption)
+                                .fontWeight(.semibold)
                                 .foregroundStyle(approche.couleur)
                         }
-                        Text("fréquence").font(.system(size: 9)).foregroundStyle(.secondary)
+                        Text("fréquence").font(.system(size: 9)).foregroundStyle(.secondary) // micro-label <11pt
                     }
 
                     Divider().frame(height: 30)
@@ -277,10 +113,11 @@ struct ActivityView: View {
                             Image(systemName: "gauge.with.needle.fill")
                                 .font(.caption2).foregroundStyle(approche.couleur)
                             Text(approche.intensiteEntrainement)
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(.nutriCaption)
+                                .fontWeight(.semibold)
                                 .foregroundStyle(approche.couleur)
                         }
-                        Text("intensité").font(.system(size: 9)).foregroundStyle(.secondary)
+                        Text("intensité").font(.system(size: 9)).foregroundStyle(.secondary) // micro-label <11pt
                     }
 
                     Divider().frame(height: 30)
@@ -297,11 +134,12 @@ struct ActivityView: View {
                                     ? "~\(String(format: "%.2f", obj.perteSemaineEstimee)) kg/sem."
                                     : "+\(String(format: "%.2f", obj.perteSemaineEstimee)) kg/sem.")
                                  : "Maintenance")
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(.nutriCaption)
+                                .fontWeight(.semibold)
                                 .foregroundStyle(approche.couleur)
                         }
                         Text(obj.estDeficit ? "perte estimée" : "gain estimé")
-                            .font(.system(size: 9)).foregroundStyle(.secondary)
+                            .font(.system(size: 9)).foregroundStyle(.secondary) // micro-label <11pt
                     }
 
                     Spacer()
@@ -311,59 +149,18 @@ struct ActivityView: View {
                 HStack(spacing: 6) {
                     Text(approche.emoji)
                     Text("Approche \(approche.label.lowercased())")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: 10, weight: .medium)) // badge compact <11pt
                         .foregroundStyle(approche.couleur)
                     Text("·")
                         .foregroundStyle(.secondary)
                     Text(approche.descriptionCourte)
-                        .font(.system(size: 10))
+                        .font(.system(size: 10)) // badge compact <11pt
                         .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 10).padding(.vertical, 5)
-                .background(approche.couleur.opacity(0.08), in: RoundedRectangle(cornerRadius: Radius.sm))
+                .background { RoundedRectangle(cornerRadius: Radius.sm).fill(approche.couleur.opacity(0.08)) }
             }
         }
-    }
-
-    private func etatPlanCard(icone: String, couleur: Color, titre: String, message: String,
-                               actionLabel: String?, action: (() -> Void)?) -> some View {
-        GlassCard {
-            VStack(spacing: Spacing.sm) {
-                Image(systemName: icone)
-                    .font(.title2).foregroundStyle(couleur.opacity(0.7))
-                Text(titre)
-                    .font(.nutriHeadline)
-                Text(message)
-                    .font(.nutriCaption).foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                if let label = actionLabel, let action {
-                    Button(action: action) {
-                        Text(label)
-                            .font(.nutriCaption)
-                            .padding(.horizontal, 14).padding(.vertical, 7)
-                            .background(couleur.opacity(0.12), in: Capsule())
-                            .foregroundStyle(couleur)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, Spacing.xs)
-        }
-    }
-
-    private func seanceDuJour(from plan: UserPlan) -> JourEntrainement? {
-        guard let e = plan.planEntrainement else { return nil }
-        let wd = Calendar.current.component(.weekday, from: Date())
-        let idx = (wd + 5) % 7
-        let jours = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
-        let label = idx < jours.count ? jours[idx] : ""
-        return e.semaineType.first { $0.jourLabel.lowercased().contains(label.lowercased()) }
-            ?? (e.semaineType.indices.contains(idx) ? e.semaineType[idx] : nil)
-    }
-
-    private func joursAvantReevaluation(plan: UserPlan) -> Int {
-        max(0, Calendar.current.dateComponents([.day], from: Date(), to: plan.prochainReevaluation).day ?? 0)
     }
 
     // MARK: - Résumé aujourd'hui
@@ -529,6 +326,6 @@ struct ActivityView: View {
 #Preview {
     NavigationStack {
         ActivityView()
-            .modelContainer(for: [ActivityEntry.self, UserProfile.self, UserPlan.self], inMemory: true)
+            .modelContainer(for: [ActivityEntry.self, UserProfile.self], inMemory: true)
     }
 }

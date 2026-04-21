@@ -213,37 +213,16 @@ struct EntryQuickActionSheet: View {
                     // Saisie quantité
                     GlassCard {
                         VStack(alignment: .leading, spacing: Spacing.sm) {
-                            Label("Quantité", systemImage: "scalemass.fill")
-                                .font(.nutriHeadline)
+                            NutriSectionHeader("Quantité", icon: "scalemass.fill")
 
-                            HStack(spacing: Spacing.md) {
-                                HStack {
-                                    Button {
-                                        quantite = max(1, quantite - 10)
-                                    } label: {
-                                        Image(systemName: "minus.circle.fill")
-                                            .font(.title2).foregroundStyle(.secondary)
-                                    }
-                                    .buttonStyle(.plain)
-
-                                    TextField("Quantité", value: $quantite, format: .number)
-                                        .font(.nutriTitle2)
-                                        .multilineTextAlignment(.center)
-                                        .frame(width: 80)
-                                        #if os(iOS)
-                                        .keyboardType(.decimalPad)
-                                        #endif
-
-                                    Button {
-                                        quantite += 10
-                                    } label: {
-                                        Image(systemName: "plus.circle.fill")
-                                            .font(.title2).foregroundStyle(Color.nutriGreen)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                                Text("g").font(.nutriBody).foregroundStyle(.secondary)
-                            }
+                            NutriStepper(
+                                title: "",
+                                value: $quantite,
+                                step: 10,
+                                range: 1...500,
+                                suffix: "g",
+                                format: "%.0f"
+                            )
 
                             Slider(value: $quantite, in: 1...500, step: 5).tint(.nutriGreen)
 
@@ -261,30 +240,20 @@ struct EntryQuickActionSheet: View {
 
                     // Boutons d'action
                     VStack(spacing: Spacing.sm) {
-                        Button {
+                        NutriButton("Déplacer vers un autre repas/date",
+                                    icon: "calendar.badge.plus",
+                                    style: .secondary) {
                             showDeplacer = true
-                        } label: {
-                            Label("Déplacer vers un autre repas/date", systemImage: "calendar.badge.plus")
-                                .frame(maxWidth: .infinity)
-                                .padding(Spacing.sm)
-                                .background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: Radius.sm))
-                                .foregroundStyle(.blue)
                         }
-                        .buttonStyle(.plain)
 
-                        Button(role: .destructive) {
+                        NutriButton("Supprimer cette entrée",
+                                    icon: "trash",
+                                    style: .destructive) {
                             modelContext.delete(entry)
                             try? modelContext.save()
                             onSupprime?()
                             dismiss()
-                        } label: {
-                            Label("Supprimer cette entrée", systemImage: "trash")
-                                .frame(maxWidth: .infinity)
-                                .padding(Spacing.sm)
-                                .background(Color.red.opacity(0.1), in: RoundedRectangle(cornerRadius: Radius.sm))
-                                .foregroundStyle(.red)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
                 .padding(Spacing.md)
@@ -295,19 +264,19 @@ struct EntryQuickActionSheet: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Annuler") { dismiss() }
+                    NutriButton("Annuler", style: .secondary, size: .small) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Enregistrer") {
+                    NutriButton("Enregistrer",
+                                style: .primary,
+                                size: .small,
+                                isDisabled: abs(quantite - entry.quantity) < 0.5) {
                         entry.quantity = quantite
                         entry.calculerMacros()
                         try? modelContext.save()
                         onModifie?()
                         dismiss()
                     }
-                    .bold()
-                    .foregroundStyle(Color.nutriGreen)
-                    .disabled(abs(quantite - entry.quantity) < 0.5)
                 }
             }
             .sheet(isPresented: $showDeplacer) {
@@ -319,7 +288,10 @@ struct EntryQuickActionSheet: View {
             }
         }
         #if os(macOS)
-        .frame(minWidth: 400, idealWidth: 440, maxWidth: 600, minHeight: 480)
+        .frame(minWidth: NutriLayout.sheetCompactWidth,
+               idealWidth: NutriLayout.sheetCompactWidth,
+               maxWidth: NutriLayout.sheetStandardWidth,
+               minHeight: NutriLayout.sheetCompactHeight)
         #endif
         #if os(iOS)
         .presentationDetents([.medium, .large])
@@ -359,26 +331,33 @@ struct DeplacerAlimentSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Aliment") {
-                    Label(entry.foodItem?.name ?? "Aliment", systemImage: "fork.knife")
-                    Text("\(entry.quantity.arrondi(0)) g · \(entry.calories.arrondi(0)) kcal")
-                        .font(.nutriCaption).foregroundStyle(.secondary)
-                }
-
-                Section("Nouvelle date") {
-                    DatePicker("Date", selection: $nouvelleDate, displayedComponents: .date)
-                        .datePickerStyle(.graphical)
-                }
-
-                Section("Repas") {
-                    Picker("Repas", selection: $nouveauRepas) {
-                        ForEach(MealType.allCases, id: \.self) { type in
-                            Label(type.label, systemImage: type.icon).tag(type)
-                        }
+            ScrollView {
+                VStack(alignment: .leading, spacing: Spacing.lg) {
+                    // ── Aliment ──────────────────────────────────────────
+                    VStack(alignment: .leading, spacing: Spacing.xs) {
+                        NutriSectionHeader("Aliment", icon: "fork.knife")
+                        Label(entry.foodItem?.name ?? "Aliment", systemImage: "fork.knife")
+                            .font(.nutriBody)
+                        Text("\(entry.quantity.arrondi(0)) g · \(entry.calories.arrondi(0)) kcal")
+                            .font(.nutriCaption).foregroundStyle(.secondary)
                     }
-                    .pickerStyle(.segmented)
+
+                    // ── Nouvelle date ────────────────────────────────────
+                    VStack(alignment: .leading, spacing: Spacing.sm) {
+                        NutriSectionHeader("Nouvelle date", icon: "calendar")
+                        NutriDatePicker(title: "", date: $nouvelleDate, style: .calendar)
+                    }
+
+                    // ── Repas ────────────────────────────────────────────
+                    VStack(alignment: .leading, spacing: Spacing.sm) {
+                        NutriSectionHeader("Repas", icon: "takeoutbag.and.cup.and.straw.fill")
+                        NutriPicker("Repas", selection: $nouveauRepas,
+                                    options: MealType.allCases.map {
+                                        NutriPickerOption($0, label: $0.label, icon: $0.icon)
+                                    })
+                    }
                 }
+                .padding(Spacing.lg)
             }
             .navigationTitle("Déplacer l'aliment")
             #if os(iOS)
@@ -386,22 +365,22 @@ struct DeplacerAlimentSheet: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Annuler") { dismiss() }
+                    NutriButton("Annuler", style: .secondary, size: .small) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Déplacer") {
+                    NutriButton("Déplacer", style: .primary, size: .small) {
                         entry.date     = nouvelleDate
                         entry.mealType = nouveauRepas.rawValue
                         try? modelContext.save()
                         onDeplace?()
                         dismiss()
                     }
-                    .bold()
                 }
             }
         }
         #if os(macOS)
-        .frame(minWidth: 420, minHeight: 500)
+        .frame(minWidth: NutriLayout.sheetCompactWidth,
+               minHeight: NutriLayout.sheetStandardHeight)
         #endif
     }
 }
